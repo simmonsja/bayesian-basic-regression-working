@@ -1,0 +1,539 @@
+---
+title: "Bayesian linear regression example"
+theme: flatly
+format:
+  html:
+    toc: true
+    number-sections: true
+editor: source
+---
+
+# Bayesian linear regression example
+
+## An ode to linear regressions
+
+Good old fashioned, handful of parameters linear regressions are great!
+
+Don't get me wrong I love fitting larger machine learning (ML) models and when you're after raw predictive power there's nothing better than finally getting that  huge neural networking singing. But in so many applications where you would employ data-driven models, linear regression models (and variations thereof) can hold their own and often be better suited to the project as a whole. 
+
+There's something very tangible about knowing all the parameters in your model. A tight knit group that you can all call friends when you push that final model to your github repo. As ML models get larger, at best they're are filled with acquaintances. More often you're left anxiously gazing into the black-box abyss just hoping to recognise a friendly face.
+
+For a while now my default fit for linear regressions has been Bayesian. Sure uncertainty quanitifcation is :fire:, but really it's the flexibility afforded by a Bayesian framework which lets you guide and extend on simple models to provide just the right level of complexity. Actually this post is really a vehicle to a future post which will dive into some of this flexibility and really show off the interesting aspect (hint: it'll be plenty hierarchical). But we have to get on the bus somewhere, and this is the stop closest to home. 
+
+I will say though, that you pay for all these flashy uncertainty bands et al. with a (mostly very modest) computational cost. Sometimes it can sneak up on you for more complex models, but for a lot of problems in the environmental space the time difference is small on modern compute. I've skimmed through enough articles to know attention spans are shorter than ever, or something to that effect, but surely we can spare a extra seconds to give our model a glow up.
+
+## What this is and what this is not
+
+- a very practical implementation based introduction to Bayesian methods
+- it is not a comprehensive guide, and I'll try refer to other books where more details are needed
+
+## The task
+
+We are going to use a great, openly available dataset that describes sandy beach response to offshore storms (as measured by shoreline change). This comes from the excellent paper:
+
+Data-driven modelling of coastal storm erosion for real-time forecasting at a wave-dominated embayed beach (Ibaceta and Harley, 2024)
+https://doi.org/10.1016/j.coastaleng.2024.104596
+
+NB: This is not in any way meant to be knock on the use of a frequentist approach in the above paper. I'll show some of the differences as we go along of course, but the true power of applying Bayesian methods only comes when fitting more complex models which we will see in the next post. I use this paper as the data are available, the model has been prepared and carefully thought about, and it was an excellent (and clear/well-written) use of data-driven modelling to explore storm erosion!
+
+Anyway I hear you, pipe down and show me some data.
+
+```{python echo=F, results='hide', message=FALSE, warning=FALSE}
+#| echo: false
+
+import os
+# cpu cores for sampling
+os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=4'
+
+import numpy as np
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score, root_mean_squared_error
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+# NumPyro for proabilistic programming
+import arviz as az
+from jax import random
+import jax
+import jax.numpy as jnp
+import numpyro
+from numpyro.diagnostics import hpdi
+import numpyro.distributions as dist
+from numpyro.infer import MCMC, NUTS
+from numpyro.infer import Predictive
+```
+
+We load the data directly from the authors' github repo (thanks again!). I'm going to walk you through a bit of the data wrangling. I often find it illuminating to see the ways people transform data to get it "analysis ready", but is you wish to skip to the juicier bits below, be my guest.
+
+As per the selected model in the paper, we will model the change in shoreline position at a given location (`dW`) with the following variables:
+
+- `Wpre`: The shoreline position before the storm
+- `Eocum`: cumulative offshore wave energy during the storm (proportional to significant wave height squared)
+- `WLres`: residual of measured water level to astronomical tide
+- `Tpeak`: peak offshore wave period during the storm
+- `Dpo`: average wave direction during the storm
+
+We are going to make a little format adjustment just to make filtering easier, there are three separate locations along which shoreline change was measured at Narrabeen (named here as exposed, partially and sheltered). These are provided as columns and we will rework the dataframe to have only a single target variable (`dW`) and convert locations into a category.
+
+```{python echo=F}
+# Load data from the github repository for the aforementioned paper
+fn = 'https://raw.githubusercontent.com/raiibacetav/data-driven-storm-erosion/refs/heads/main/data.csv'
+raw_data = pd.read_csv(fn, index_col=0)
+# lets take a peek
+display(raw_data.iloc[90:95])
+```
+
+
+```{python echo=F}
+# Define the variables we are interested in and rework the dataframe
+cases = [ 'dW_exposed','dW_partially', 'dW_sheltered']
+id_vars = ['Onset','Eocum','WLres','Tpeak','Dpo'] # our covariates and Onset for sanity
+pre_vars = ['Wpre{}'.format(_[2:]) for _ in cases]
+
+# take only the columns we need
+df =  raw_data.copy()[id_vars+pre_vars+cases]
+# convert Onset to datetime
+df['Onset'] = pd.to_datetime(df['Onset'], dayfirst=True)
+# we wilk convert 3 columns into 2 (category and value) by melting - oh what a world
+df = pd.melt(df, id_vars = id_vars + pre_vars, var_name='location', value_name='dW').reset_index(drop=True)
+# we're going similarly grab the correct prestorm beach position based on the category, the lazy way
+for ii in np.arange(df.shape[0]):
+    df.loc[ii,'Wpre'] = df.loc[ii,'Wpre{}'.format(df.loc[ii,'location'][2:])] 
+# drop the now obsolete Wpre columns
+df = df.drop(columns=pre_vars)
+# lets just remove all the unnecessary dW_ in the variable column
+df['location'] = df['location'].str.replace('dW_','')
+df.sort_values(by=['Onset','location'], inplace=True)
+# and lets get rid of any NaNs
+df =  df.dropna().reset_index(drop=True)
+```
+
+
+```{python echo=F}
+display(df.head())
+```
+
+You should be able to see the 1999-02-05 storm correctly flowing from `raw_data` through to `df`.
+
+With this shift to categories, I am also signally a bit our intent down the track. More on this at the end of the post. In the sections below we will focus on the basics of implementing a Bayesian regression.
+
+## The model
+
+We follow the model provided in the paper:
+
+$$\Delta W = \beta_0 + \beta_1 E_{o,cum} + \beta_2 W_{pre} + \beta_3 D_{po} + \beta_4 T_{p,peak} + \beta_5 WL_{res} + \epsilon$$
+
+We have a model that predicts the change in shoreline ($\Delta W$) from the additive combination of our five variables (along with an intecept term $\beta_0$). 
+
+We're limited, of course, by the amount of words that I can repsonsibly subject you to. So for anyone wanting a comprehensive resource that introduces linear regression from the very basics (and goes far further than this blog too!) - [Regression and Other Stories by Gelman, Hill and Vehtari](https://users.aalto.fi/~ave/ROS.pdf).
+
+But onto the little red caboose languishing at the end, $\epsilon$. Sometimes doesn't get the attention of the cars up front, but a workhorse in any gradient ascent. In a frequentist context this is the term we minimise in ordinary least squares
+
+```{python echo=F}
+def linear_model_simple(X,cat,y=None):
+    '''
+    Define linear model with priors for the parameters and model error
+    Inputs:
+        energy: storm energy
+        dshl: observed shoreline change
+    '''
+    # Define priors
+    with numpyro.plate("cats", n_cat):
+        intercept = numpyro.sample("intercept",dist.Normal(0, 10)) 
+        b_Eocum = numpyro.sample("b_Eocum",dist.Normal(0, 10)) 
+        b_WLres = numpyro.sample("b_WLres",dist.Normal(0, 10))
+        b_Tpeak = numpyro.sample("b_Tpeak",dist.Normal(0, 10))
+        b_sinDrel = numpyro.sample("b_sinDrel",dist.Normal(0, 10))
+        b_Wpre = numpyro.sample("b_Wpre",dist.Normal(0, 10)) 
+    # jax.debug.print("{}",b_WLres)
+        sigma = numpyro.sample("sigma",dist.Exponential(1))
+
+    # jax.debug.print("{}",intercept[cat])
+
+    mu = b_Eocum[cat] * X[:,0] + b_WLres[cat] * X[:,1] + b_Tpeak[cat] * X[:,2] + b_sinDrel[cat] * X[:,3] + b_Wpre[cat] * X[:,4] + intercept[cat]
+
+    # store the model prediction before we account for the error
+    numpyro.deterministic("mu", mu)
+    # and then finally sample so we can compare to our observations
+    numpyro.sample("y_out", dist.Normal(mu, sigma[cat]), obs=y)
+```
+
+```{python echo=F}
+def linear_model(X,cat,y=None):
+    '''
+    Define linear model with priors for the parameters and model error
+    Inputs:
+        energy: storm energy
+        dshl: observed shoreline change
+    '''
+
+    intercept_bar = numpyro.sample("intercept_bar",dist.Normal(0, 10)) 
+    b_Eocum_bar = numpyro.sample("b_Eocum_bar",dist.Normal(0, 10)) 
+    b_WLres_bar = numpyro.sample("b_WLres_bar",dist.Normal(0, 10))
+    b_Tpeak_bar = numpyro.sample("b_Tpeak_bar",dist.Normal(0, 10))
+    b_sinDrel_bar = numpyro.sample("b_sinDrel_bar",dist.Normal(0, 10))
+    b_Wpre_bar = numpyro.sample("b_Wpre_bar",dist.Normal(0, 10)) 
+
+    # Define priors
+    tau = 0.1
+    with numpyro.plate("cats", n_cat):
+        intercept = numpyro.sample("intercept",dist.Normal(intercept_bar, tau)) 
+        b_Eocum = numpyro.sample("b_Eocum",dist.Normal(b_Eocum_bar, tau)) 
+        b_WLres = numpyro.sample("b_WLres",dist.Normal(b_WLres_bar, tau))
+        b_Tpeak = numpyro.sample("b_Tpeak",dist.Normal(b_Tpeak_bar, tau))
+        b_sinDrel = numpyro.sample("b_sinDrel",dist.Normal(b_sinDrel_bar, tau))
+        b_Wpre = numpyro.sample("b_Wpre",dist.Normal(b_Wpre_bar, tau)) 
+
+    # jax.debug.print("{}",b_WLres)
+        sigma = numpyro.sample("sigma",dist.Exponential(1))
+
+    # jax.debug.print("{}",intercept[cat])
+
+    mu = b_Eocum[cat] * X[:,0] + b_WLres[cat] * X[:,1] + b_Tpeak[cat] * X[:,2] + b_sinDrel[cat] * X[:,3] + b_Wpre[cat] * X[:,4] + intercept[cat]
+
+    # store the model prediction before we account for the error
+    numpyro.deterministic("mu", mu)
+    # and then finally sample so we can compare to our observations
+    numpyro.sample("y_out", dist.Normal(mu, sigma[cat]), obs=y)
+```
+
+```{python echo=F}
+avg_dir = 135 #in degrees
+df =  df_storms.copy()
+df['sinDrel'] = np.sin((df['Dpo']-avg_dir)*np.pi/180)
+df
+
+X = jnp.array(df[id_vars+['Wpre']].values)
+cat = jnp.array(df['variable'].astype('category').cat.codes).astype(jnp.int32)
+y = jnp.array(df['value'].values)
+
+X = (X - X.mean(axis=0))/X.mean(axis=0)
+
+y_mean = y.mean() 
+y_scale = y.std() 
+y = (y-y_mean)/y_scale
+
+n_cat = df['variable'].astype('category').cat.codes.max()+1
+
+```
+
+
+```{python echo=F}
+# JAX requires a key for random number generation
+rng_key_ = random.PRNGKey(2101)
+# here take 100 samples from our priors and make predictions on x_log
+prior_samples = Predictive(linear_model, num_samples=500)(
+    rng_key_, X=X, cat=cat
+)
+prior_samples = {k: jnp.expand_dims(v,axis=0) for k, v in prior_samples.items()}
+# and put this into arviz for easy plotting
+arviz_priors = az.from_dict(
+    prior=prior_samples
+)
+arviz_priors
+
+```
+
+
+```{python echo=F}
+var_names = ['b_{}'.format(_) for _ in id_vars]
+
+```
+
+
+```{python echo=F}
+# and now plot the distributions and the simulated data
+print('#'*80)
+print('Priors')
+priors_ax = az.plot_trace(
+    arviz_priors.prior, 
+    var_names=var_names,
+    figsize=(8,6),
+    rug=True,
+    show=False,
+    combined=True
+)
+# make it readable
+plt.subplots_adjust(hspace=0.5)
+plt.show()
+
+```
+
+# Now we sample
+
+```{python echo=F}
+
+# settings 
+num_samples = 1000
+num_warmup = num_samples
+num_chains = 3
+ci = 0.89
+
+# JAX requires a key for random number generation
+rng_key_ = random.PRNGKey(2101)
+
+# define the sampler - No U-Turn Sampler (NUTS)
+kernel = NUTS(linear_model)
+
+# define the mcmc wrapper
+mcmc_obj = MCMC(
+    kernel, 
+    num_warmup=num_warmup, 
+    num_samples=num_samples,
+    num_chains=num_chains
+)
+
+# now run the sampler for num_samples+burnin
+mcmc_obj.run(
+    rng_key_, X=X, cat=cat, y=y
+)
+mcmc_obj.print_summary()
+# get the samples which will form our posterior
+samples = mcmc_obj.get_samples()
+
+# get the samples for predictive uncertainty (our linear model + error)
+posterior_predictive = Predictive(linear_model, samples)(
+    rng_key_, X=X, cat=cat, y=y
+)
+
+# get the mean model prediciton
+mean_mu = jnp.mean(posterior_predictive['mu'], axis=0)
+# hpdi is used to compute the credible intervals corresponding to ci
+hpdi_mu = hpdi(posterior_predictive['mu'], ci)
+hpdi_sim_y = hpdi(posterior_predictive['y_out'], ci)
+
+arviz_posterior = az.from_numpyro(
+    mcmc_obj,
+    prior=prior_samples,
+    posterior_predictive=posterior_predictive,
+)
+# arviz_posterior
+```
+
+
+```{python echo=F}
+# JAX requires a key for random number generation
+rng_key_ = random.PRNGKey(2101)
+
+# define the sampler - No U-Turn Sampler (NUTS)
+kernel = NUTS(linear_model_simple)
+
+# define the mcmc wrapper
+mcmc_obj_simple = MCMC(
+    kernel, 
+    num_warmup=num_warmup, 
+    num_samples=num_samples,
+    num_chains=num_chains
+)
+
+# now run the sampler for num_samples+burnin
+mcmc_obj_simple.run(
+    rng_key_, X=X, cat=cat, y=y
+)
+mcmc_obj_simple.print_summary()
+# get the samples which will form our posterior
+samples_simple = mcmc_obj.get_samples()
+
+# get the samples for predictive uncertainty (our linear model + error)
+posterior_predictive_simple = Predictive(linear_model_simple, samples_simple)(
+    rng_key_, X=X, cat=cat, y=y
+)
+
+# get the mean model prediciton
+mean_mu_simple = jnp.mean(posterior_predictive_simple['mu'], axis=0)
+# hpdi is used to compute the credible intervals corresponding to ci
+hpdi_mu_simple = hpdi(posterior_predictive_simple['mu'], ci)
+hpdi_sim_y_simple = hpdi(posterior_predictive_simple['y_out'], ci)
+
+arviz_posterior_simple = az.from_numpyro(
+    mcmc_obj_simple,
+    posterior_predictive=posterior_predictive_simple,
+)
+# arviz_posterior
+
+```
+
+
+```{python echo=F}
+
+print('#'*80)
+print('Posterior')
+az.plot_trace(
+    arviz_posterior,
+    var_names=var_names + ['intercept'],
+    figsize=(8,6),
+    show=False
+)
+# make it readable
+plt.subplots_adjust(hspace=0.5)
+plt.show()
+```
+
+
+```{python echo=F}
+print('#'*80)
+print('Posterior')
+az.plot_forest(
+    [arviz_posterior, arviz_posterior_simple],
+    var_names=var_names+ ['intercept'],
+    figsize=(4,10),
+    combined=True
+)
+
+```
+
+
+
+```{python echo=F}
+results_df = df[['variable','value']].copy()
+results_df['mod_y'] = mean_mu * y_scale + y_mean
+results_df
+results_df_simple  = df[['variable','value']].copy()
+results_df_simple ['mod_y'] = mean_mu_simple * y_scale + y_mean
+results_df_simple 
+
+```
+
+
+
+```{python echo=F}
+
+fig,axs = plt.subplots(1,3,figsize = (15,5))
+axs =  axs.ravel()
+RMSE = [] 
+R2   = []
+colors = ['tab:blue','tab:orange','tab:green']
+storms = []
+for i,case in enumerate(cases):
+    case_results_df = results_df[results_df['variable']==case]
+    score = r2_score(case_results_df['value'].values,case_results_df['mod_y'].values) #Coef of determination
+    rmse = np.sqrt(mean_squared_error(case_results_df['value'].values,case_results_df['mod_y'].values)) #root mean squared error
+
+    #Plot
+    textstr = '\n'.join((r'$R^{2}=%.2f$' % (score, ),
+                            r'RMSE=$%.1f$ m' % (rmse, )))
+    props = dict(boxstyle='round', facecolor='lightgrey')
+    axs[i].text(0.03, 0.14, textstr, transform=axs[i].transAxes, fontsize=10,
+            verticalalignment='top', bbox=props)
+    axs[i].plot(case_results_df['value'].values,case_results_df['mod_y'].values,'.', label = None, color = colors[i],markersize=8)
+    axs[i].plot(np.arange(-30,45,0.5),np.arange(-30,45,0.5),linestyle = 'dashed', color = 'black',label = '1:1')
+    axs[i].set_xlim([-20,45])
+    axs[i].set_ylim([-15,30])
+    axs[i].axvline(x=0, color = 'lightgrey', linestyle = 'dashed')
+    axs[i].axhline(y=0, color = 'lightgrey', linestyle = 'dashed')
+    axs[i].set_xlabel(r'$\Delta W$'+'(m) - observed')
+    axs[i].set_ylabel(r'$\Delta W$'+'(m) - multi-linear regression')
+    axs[i].legend(loc = 'lower right')
+    axs[i].set_title(CASES[i])  
+
+    fig.suptitle(r'$\Delta W$' + ' - Descriptive approach')
+    for ax in axs:
+        ax.grid(linestyle = 'dashed', color = 'lightgrey')
+    plt.tight_layout()
+plt.show()
+```
+
+
+
+```{python echo=F}
+fig,axs = plt.subplots(1,3,figsize = (15,5))
+axs =  axs.ravel()
+RMSE = [] 
+R2   = []
+colors = ['tab:blue','tab:orange','tab:green']
+storms = []
+for i,case in enumerate(cases):
+    case_results_df = results_df_simple[results_df_simple['variable']==case]
+    score = r2_score(case_results_df['value'].values,case_results_df['mod_y'].values) #Coef of determination
+    rmse = np.sqrt(mean_squared_error(case_results_df['value'].values,case_results_df['mod_y'].values)) #root mean squared error
+
+    #Plot
+    textstr = '\n'.join((r'$R^{2}=%.2f$' % (score, ),
+                            r'RMSE=$%.1f$ m' % (rmse, )))
+    props = dict(boxstyle='round', facecolor='lightgrey')
+    axs[i].text(0.03, 0.14, textstr, transform=axs[i].transAxes, fontsize=10,
+            verticalalignment='top', bbox=props)
+    axs[i].plot(case_results_df['value'].values,case_results_df['mod_y'].values,'.', label = None, color = colors[i],markersize=8)
+    axs[i].plot(np.arange(-30,45,0.5),np.arange(-30,45,0.5),linestyle = 'dashed', color = 'black',label = '1:1')
+    axs[i].set_xlim([-20,45])
+    axs[i].set_ylim([-15,30])
+    axs[i].axvline(x=0, color = 'lightgrey', linestyle = 'dashed')
+    axs[i].axhline(y=0, color = 'lightgrey', linestyle = 'dashed')
+    axs[i].set_xlabel(r'$\Delta W$'+'(m) - observed')
+    axs[i].set_ylabel(r'$\Delta W$'+'(m) - multi-linear regression')
+    axs[i].legend(loc = 'lower right')
+    axs[i].set_title(CASES[i])  
+
+    fig.suptitle(r'$\Delta W$' + ' - Descriptive approach')
+    for ax in axs:
+        ax.grid(linestyle = 'dashed', color = 'lightgrey')
+    plt.tight_layout()
+plt.show()
+
+```
+
+
+```{python echo=F}
+
+fig,axs = plt.subplots(1,3,figsize = (15,5))
+axs =  axs.ravel()
+RMSE = [] 
+R2   = []
+colors = ['tab:blue','tab:orange','tab:green']
+storms = []
+
+for i,case in enumerate(cases):
+    
+    casewi = 'Wpre'+case[2:]
+    df =  df_storms.copy()
+    df['sinDrel'] = np.sin((df['Dpo']-avg_dir)*np.pi/180)
+    
+    df =  df[['Eocum','WLres','Tpeak','sinDrel',casewi, case]]
+    
+    #renaming
+    df.columns = ['CumEOff', 'WLres','Tpeak','sinDrel','Wpre', 'dW']
+    
+    df =  df.dropna()   
+
+    #Linear regression with intercept
+    LR = LinearRegression(fit_intercept=True) 
+    LR.fit(df[['CumEOff', 'WLres', 'Tpeak', 'sinDrel', 'Wpre']],df.dW)
+    
+    
+    y_prediction =  LR.predict(df[['CumEOff', 'WLres', 'Tpeak', 'sinDrel', 'Wpre']])
+    
+    score=r2_score(df.dW,y_prediction) #Coef of determination
+    rmse = np.sqrt(mean_squared_error(df.dW,y_prediction)) #root mean squared error
+    
+    #Plot
+    
+    textstr = '\n'.join((r'$R^{2}=%.2f$' % (score, ),
+                         r'RMSE=$%.1f$ m' % (rmse, )))
+    props = dict(boxstyle='round', facecolor='lightgrey')
+    axs[i].text(0.03, 0.14, textstr, transform=axs[i].transAxes, fontsize=10,
+            verticalalignment='top', bbox=props)
+    axs[i].plot(df['dW'],y_prediction,'.', label = None, color = colors[i],markersize=8)
+    axs[i].plot(np.arange(-30,45,0.5),np.arange(-30,45,0.5),linestyle = 'dashed', color = 'black',label = '1:1')
+    axs[i].set_xlim([-20,45])
+    axs[i].set_ylim([-15,30])
+    axs[i].axvline(x=0, color = 'lightgrey', linestyle = 'dashed')
+    axs[i].axhline(y=0, color = 'lightgrey', linestyle = 'dashed')
+    axs[i].set_xlabel(r'$\Delta W$'+'(m) - observed')
+    axs[i].set_ylabel(r'$\Delta W$'+'(m) - multi-linear regression')
+    axs[i].legend(loc = 'lower right')
+    axs[i].set_title(CASES[i])  
+
+fig.suptitle(r'$\Delta W$' + ' - Descriptive approach')
+for ax in axs:
+    ax.grid(linestyle = 'dashed', color = 'lightgrey')
+plt.tight_layout()
+```
+
+Too often we can get trapped thinking about a fixed model structure being repeatedly applied at different locations. I would argue that where possible we should think about data more whollistically, we are modelling a very similar process at three separate locations. So why not fit all the data within a single model, *categorised* by location?
+
+This opens up a very cool (:fire:?) possibility: sharing information about model parameters between locations. Sharing is caring after all and our models, doing their best to interpret the messy environmental data we give them, often need a little bit of TLC.
+
+I'll leave it there with this absolute cliff hanger, tune in next time for more.
