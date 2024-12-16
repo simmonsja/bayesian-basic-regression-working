@@ -18,7 +18,7 @@ Don't get me wrong I love fitting larger machine learning (ML) models and when y
 
 There's something very tangible about knowing all the parameters in your model. A tight knit group that you can all call friends when you push that final model to your github repo. As ML models get larger, at best they're are filled with acquaintances. More often you're left anxiously gazing into the black-box abyss just hoping to recognise a friendly face.
 
-For a while now my default fit for linear regressions has been Bayesian. Sure uncertainty quanitifcation is :fire:, but really it's the flexibility afforded by a Bayesian framework which lets you guide and extend on simple models to provide just the right level of complexity. Actually this post is really a vehicle to a future post which will dive into some of this flexibility and really show off the interesting aspect (hint: it'll be plenty hierarchical). But we have to get on the bus somewhere, and this is the stop closest to home. 
+For a while now my default fit for linear regressions has been Bayesian. Sure uncertainty quantification is :fire:, but really it's the flexibility afforded by a Bayesian framework which lets you guide and extend on simple models to provide just the right level of complexity. Actually this post is really a vehicle to a future post which will dive into some of this flexibility and really show off the interesting aspect (hint: it'll be plenty hierarchical). But we have to get on the bus somewhere, and this is the stop closest to home. 
 
 I will say though, that you pay for all these flashy uncertainty bands et al. with a (mostly very modest) computational cost. Sometimes it can sneak up on you for more complex models, but for a lot of problems in the environmental space the time difference is small on modern compute. I've skimmed through enough articles to know attention spans are shorter than ever, or something to that effect, but surely we can spare a extra seconds to give our model a glow up.
 
@@ -97,7 +97,7 @@ pre_vars = ['Wpre{}'.format(_[2:]) for _ in cases]
 df =  raw_data.copy()[id_vars+pre_vars+cases]
 # convert Onset to datetime
 df['Onset'] = pd.to_datetime(df['Onset'], dayfirst=True)
-# we wilk convert 3 columns into 2 (category and value) by melting - oh what a world
+# we will convert 3 columns into 2 (category and value) by melting, melting - oh what a world
 df = pd.melt(df, id_vars = id_vars + pre_vars, var_name='location', value_name='dW').reset_index(drop=True)
 # we're going similarly grab the correct prestorm beach position based on the category, the lazy way
 for ii in np.arange(df.shape[0]):
@@ -118,7 +118,7 @@ display(df.head())
 
 You should be able to see the 1999-02-05 storm correctly flowing from `raw_data` through to `df`.
 
-With this shift to categories, I am also signally a bit our intent down the track. More on this at the end of the post. In the sections below we will focus on the basics of implementing a Bayesian regression.
+With this shift to categories, I am also signalling our intent down the track. More on this at the end of the post. In the sections below we will focus on the basics of implementing a Bayesian regression.
 
 ## The model
 
@@ -128,9 +128,9 @@ $$\Delta W = \beta_0 + \beta_1 E_{o,cum} + \beta_2 W_{pre} + \beta_3 D_{po} + \b
 
 We have a model that predicts the change in shoreline ($\Delta W$) from the additive combination of our five variables (along with an intecept term $\beta_0$). 
 
-We're limited, of course, by the amount of words that I can repsonsibly subject you to. So for anyone wanting a comprehensive resource that introduces linear regression from the very basics (and goes far further than this blog too!) - [Regression and Other Stories by Gelman, Hill and Vehtari](https://users.aalto.fi/~ave/ROS.pdf).
+We're limited, of course, by the amount of words that I can responsibly subject you to. So for anyone wanting a comprehensive resource that introduces linear regression from the very basics (and goes far further than this blog too!) - [Regression and Other Stories by Gelman, Hill and Vehtari](https://users.aalto.fi/~ave/ROS.pdf).
 
-But onto the little red caboose languishing at the end, $\epsilon$. Sometimes doesn't get the attention of the cars up front, but a workhorse in any gradient ascent. In a frequentist context this is the term we minimise in ordinary least squares
+But onto the little red caboose languishing at the end, $\epsilon$. Sometimes it doesn't get the attention of the cars up front, but it's a workhorse in any gradient ascent.
 
 ```{python echo=F}
 def linear_model_simple(X,cat,y=None):
