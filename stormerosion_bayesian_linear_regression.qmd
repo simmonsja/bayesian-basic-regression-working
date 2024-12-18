@@ -130,7 +130,100 @@ We have a model that predicts the change in shoreline ($\Delta W$) from the addi
 
 We're limited, of course, by the amount of words that I can responsibly subject you to. So for anyone wanting a comprehensive resource that introduces linear regression from the very basics (and goes far further than this blog too!) - [Regression and Other Stories by Gelman, Hill and Vehtari](https://users.aalto.fi/~ave/ROS.pdf).
 
-But onto the little red caboose languishing at the end, $\epsilon$. Sometimes it doesn't get the attention of the cars up front, but it's a workhorse in any gradient ascent.
+But onto the little red caboose languishing at the end, $\epsilon$. Sometimes it doesn't get the attention of the cars up front, but it's a workhorse in any gradient ascent. To help us intuit the Bayesian approach to fitting, lets simplify our model. We have our five variables, plus an intercept, which we will label collectively as $\mathbf{X}$ and coefficients for each that we must fit which we label collectively as $\mathbf{\beta}$ (see [the helpful wiki on linear regression if this notation is unfamiliar](https://en.wikipedia.org/wiki/Linear_regression#Formulation)). 
+
+We can condense our model to:
+
+$$
+\Delta W = \mathbf{X} \mathbf{\beta} + \epsilon
+$$
+
+But what is $\epsilon$ in a Bayesian regression? One way to describe it would be that:
+
+- $\mathbf{X} \mathbf{\beta}$ describes our model estimating the values of $\Delta W$
+- $\epsilon$ describes the residuals or errors of our model when considering our data
+
+In this case we are going to assume that our residuals are normally distributed with a standard deviation of $\sigma$ and centered around zero ($\mathcal{N}(0, \sigma)$). Why? This is a good start and a common assumption. Lot of stuff in nature is normal, and my mum tells me I'm normal too. Plus thinking about the alternatives too hard would lead us to the scary world of generalised linear models, and that's not for today my friend.
+
+Okay so:
+
+$$
+\Delta W = \mathbf{X} \mathbf{\beta} + \epsilon \qquad \epsilon \sim \mathcal{N}(0, \sigma)
+$$
+
+We could also frame this in another way that is perhaps more Bayesian and will align better with our code below. We could say that our observed values of $\Delta W$ are generated from a normal distribution with mean $\mathbf{X} \mathbf{\beta}$ and standard deviation $\sigma$. Same emperor, new clothes.
+
+$$
+\Delta W \sim \mathcal{N}(\mathbf{X} \mathbf{\beta}, \sigma)
+$$
+
+## A brief aside on fitting
+
+But, how the heck does this help us to fit a model? We're not going to be able to answer this fully, but lets build some inituition. We need to fit the parameters of our model ($\mathbf{\beta}$ and $\sigma$).
+
+
+```{python echo=F}
+import numpy as np
+import numpyro
+import numpyro.distributions as dist
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# make dummy data y = 0.1 x + 0.2 + noise (0.1)
+np.random.seed(0)
+X = np.random.randn(100)
+y = 0.1 * X + 0.2 + 0.1 * np.random.randn(100)
+
+# build a simple model of this in NumPyro
+def model(X, y=None):
+    # Define priors
+    beta_0 = numpyro.sample("beta_0", dist.Normal(0, 1))
+    beta_1 = numpyro.sample("beta_1", dist.Normal(0, 1))
+    sigma = numpyro.sample("sigma", dist.Exponential(1))
+    # Define the model
+    mu = beta_0 + beta_1 * X
+    # store the model prediction before we account for the error
+    numpyro.deterministic("mu", mu)
+    # and then finally sample so we can compare to our observations
+    numpyro.sample("y_out", dist.Normal(mu, sigma), obs=y)
+
+# generate 10 possible solutions
+proposed_solutions = {
+    "beta_0" : np.array([0.2, 0.1, 0.05, 0.19, 0.21, 0.4, 0.45, 0.25, 0.05, 0.2]),
+    "beta_1" : np.array([0.1, 0.2, 0.05, 0.11, 0.09, 0, -0.1, 0.15, 0.2, 0.3]),
+    "sigma" : np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
+}
+
+loglik = numpyro.infer.util.log_likelihood(
+    model = model, 
+    posterior_samples = proposed_solutions,
+    X = X, 
+    y = y
+)
+
+# plot the predicted line of each of the proposed solutions coloured by the log likelihood and the data
+# sns.set_theme(font_scale=1.5, style="whitegrid")
+plt.figure(figsize=(8,6))
+plt.scatter(X, y, color="black", s=10)
+for i in range(len(loglik['y_out'])):
+    # and weight the width of the line by the log likelihood
+    plt.plot(X, X * proposed_solutions['beta_1'][i] + proposed_solutions['beta_0'][i], color=plt.cm.viridis(loglik['y_out'][i].mean()), alpha=0.5, lw = 2)
+plt.xlabel("X")
+plt.ylabel("y")
+plt.colorbar(label="log likelihood")
+plt.show()
+
+print(loglik['y_out'].mean(axis=1))
+```
+
+
+
+For our purposes, for the rest of this blog we are going to treat the fitting process as a magic. Please go and read more from many better sources than I to build an understanding of MCMC. But for us. We specify the data generating process with our model. Then the NumPyro sampling fairy appears from nowhere, pries open the chassis of my laptop and greedily feeds on the power being fed to my CPU for a period of seconds to minutes. The gorged fairy then waves its magic wand and voilà, samples from the posterior distribution are delivered into memory.
+
+**The blood of the CPU will keep you alive, even if you're an inch from death, but at a terrible price.**
+
+- we need to fit the params ($\mu$ or the betas that make up $\mu$, and $\sigma$) based on how well they explain the data
+"What this means, recall, is that the machine considers every possible combination of the  parameter values. With a linear model, some of the parameters now stand for the strength  of association between the mean of the outcome, µ, and the value of some other variable.  For each combination of values, the machine computes the posterior probability, which is  a measure of relative plausibility, given the model and data. So the posterior distribution  ranks the infinite possible combinations of parameter values by their logical plausibility."
 
 ```{python echo=F}
 def linear_model_simple(X,cat,y=None):
