@@ -143,7 +143,7 @@ But what is $\epsilon$ in a Bayesian regression? One way to describe it would be
 - $\mathbf{X} \mathbf{\beta}$ describes our model estimating the values of $\Delta W$
 - $\epsilon$ describes the residuals or errors of our model when considering our data
 
-In this case we are going to assume that our residuals are normally distributed with a standard deviation of $\sigma$ and centered around zero ($\mathcal{N}(0, \sigma)$). Why? This is a good start and a common assumption. Lot of stuff in nature is normal, and my mum tells me I'm normal too. Plus thinking about the alternatives too hard would lead us to the scary world of generalised linear models, and that's not for today my friend.
+In this case we are going to assume that our residuals are normally distributed with a standard deviation of $\sigma$ and centered around zero ($\mathcal{N}(0, \sigma)$). Why? This is a good start and a common assumption. Lot of stuff in nature is normal, it's hip to be normal. Plus thinking about the alternatives too hard would lead us to the scary world of generalised linear models, and that's not for today my friend.
 
 Okay so:
 
@@ -151,16 +151,31 @@ $$
 \Delta W = \mathbf{X} \mathbf{\beta} + \epsilon \qquad \epsilon \sim \mathcal{N}(0, \sigma)
 $$
 
-We could also frame this in another way that is perhaps more Bayesian and will align better with our code below. We could say that our observed values of $\Delta W$ are generated from a normal distribution with mean $\mathbf{X} \mathbf{\beta}$ and standard deviation $\sigma$. Same emperor, new clothes.
+We could also frame this in another way that is perhaps more Bayesian and will align better with our code below. We could say that our observed values of $\Delta W$ are generated from a normal distribution with mean $\mathbf{X} \mathbf{\beta}$ and standard deviation $\sigma$. Same emperor, new clothes. $\sigma$ then becomes another parameter we will learn from the data.
 
 $$
 \Delta W \sim \mathcal{N}(\mathbf{X} \mathbf{\beta}, \sigma)
 $$
 
-## A brief aside on fitting
+## A brief aside on fitting models
 
-But, how the heck does this help us to fit a model? We're not going to be able to answer this fully, but lets build some inituition. We need to fit the parameters of our model ($\mathbf{\beta}$ and $\sigma$).
+But, how the heck does this help us to fit a model? What do fit even mean in a Bayesian framework?
 
+In a Bayesian framework we are not aiming to learn a single set of "true" parameter values for our $\beta$'s and $\sigma$. That would be so very frequentist, instead we treat parameters as being probabilistic. Maybe there's a true value to be found, theoretically if we had the perfect model and infinite data (environmental systems never play this nice 🥲). There's no reason to get more into frequentist vs Bayesian approaches, I only bring it up as most people default to frequentist approaches. Both are great, both are useful, both can quantify uncertainty even. But this is a post about Bayes and that'll be that.
+
+To get to out posterior distribution we need three things:
+
+- a model that includes a specified likelihood function
+- prior distributions for each of our paramaters
+- data
+
+Our assumptions about the form of the model and the data generating process that we specified above give rise to a likelihood. The likelihood is a measure of how likely the data are given the model and a set of parameter values. By specifying 
+
+
+
+We're not going to be able to answer this fully, but lets build some inituition. Using a Bayesian approach we are setting out to find the posterior distrbituion of our parameters ($\mathbf{\beta}$ and $\sigma$). 
+
+Our machine for obtaining samples to build a picture of the posterior is going to be Markov Chain Monte Carlo (MCMC). For a great introduction to MCMC see [this lecture](https://youtu.be/rZk2FqX2XnY?si=UpGAmJ3LEGXtGSz-&t=610) from Richard McElreath's great Statistical Rethinking course.
 
 ```{python echo=F}
 import numpy as np
