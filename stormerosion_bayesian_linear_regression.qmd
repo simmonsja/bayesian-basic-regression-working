@@ -240,6 +240,29 @@ For our purposes, for the rest of this blog we are going to treat the fitting pr
 - we need to fit the params ($\mu$ or the betas that make up $\mu$, and $\sigma$) based on how well they explain the data
 "What this means, recall, is that the machine considers every possible combination of the  parameter values. With a linear model, some of the parameters now stand for the strength  of association between the mean of the outcome, µ, and the value of some other variable.  For each combination of values, the machine computes the posterior probability, which is  a measure of relative plausibility, given the model and data. So the posterior distribution  ranks the infinite possible combinations of parameter values by their logical plausibility."
 
+
+now what we maybe have a little bit of intuition about how we get the elusive posterior distribution, let's turn back to our original example. We're going to look at how create the ingredients for sampling using the numpyro package. for numpyro to work its magic, we need to supply it with a function that:
+
+- takes in the data (covariates (X) and target, y)
+- describes the parameters in our model and specifies prior distributions for each
+- specifies the model that, given the data and the parameters, estimates the target (y)
+
+really part 2 is the only new part from what the authors did in their paper. so we start by defining a function `linear_model()` that takes in x and y. you'll notice that y is optional. Our model is always generative and will produce estimates of the target when before fitting (thanks priors). we will use this as a handy check on our priors later in the piece. 
+
+the next bit I want to focus on is the model itself, it specifies the same equation we saw above with all our beta terms and the various columns of the data. this sounds feel familiar and is the engine of our model, defining how we expect the input to be related to the output ( in this case via a simple additive linear model). 
+
+the next part is specifying the form of the residuals or the distribution of observations given the model as we saw above. this defines our likelihood(XX check Vs the stan definition which is different I think as it includes the prior) as discussed above. 
+
+the final part describes our priors. let's set them all as n(0,1). 
+
+somethings going on here, we have multiple regions of the parameter space showing up as important and our model won't converge. I'm afraid dear reader I've lead you deliberately 
+ down the wrong path to make a point. recall above that we are modelling data from 3 locations, each with different characteristics and likely different relationships between covariates and targets. it's an easy fix to be sure, but I think it shows nicely how transparent a Bayesian model is. because you're taking many samples from the posterior and visualising the spread, you can identify in a nice way the quirks of your model and data. yes we have taken a bit more time to set it up but at least for me I find the modelling process overall a lot more transparent and this gives me trust. not so much of a problem here where we are fitting a linear model but with more complex models very useful and the next blog post will show an example of this. 
+
+
+so let's do this model justice. 
+
+describes our model and the c
+
 ```{python echo=F}
 def linear_model_simple(X,cat,y=None):
     '''
