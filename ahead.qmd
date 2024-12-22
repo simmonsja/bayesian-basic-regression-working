@@ -400,7 +400,7 @@ for ax in axs:
 plt.tight_layout()
 ```
 
-Too often we can get trapped thinking about a fixed model structure being repeatedly applied at different locations. I would argue that where possible we should think about data more whollistically, we are modelling a very similar process at three separate locations. So why not fit all the data within a single model, *categorised* by location?
+Too often we can get trapped thinking about a fixed model structure being repeatedly applied at different locations. I would argue that where possible we should think about data more whollistically, we are modelling a very similar process at three separate locations. So why not fit all the data within a single model, *categorised* by location as we did above?
 
 This opens up a very cool (:fire:?) possibility: sharing information about model parameters between locations. Sharing is caring after all and our models, doing their best to interpret the messy environmental data we give them, often need a little bit of TLC.
 
