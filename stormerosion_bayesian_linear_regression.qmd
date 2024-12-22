@@ -259,9 +259,16 @@ somethings going on here, we have multiple regions of the parameter space showin
  down the wrong path to make a point. recall above that we are modelling data from 3 locations, each with different characteristics and likely different relationships between covariates and targets. it's an easy fix to be sure, but I think it shows nicely how transparent a Bayesian model is. because you're taking many samples from the posterior and visualising the spread, you can identify in a nice way the quirks of your model and data. yes we have taken a bit more time to set it up but at least for me I find the modelling process overall a lot more transparent and this gives me trust. not so much of a problem here where we are fitting a linear model but with more complex models very useful and the next blog post will show an example of this. 
 
 
-so let's do this model justice. 
+so let's do this model justice. there are three sites and as the authors identified, there are quite different processes going on at these sites given the level at which we are describing the data. as an aside I like thinking about things in this way, there is no difference in the fundamental physics at each site. quarks are quarks no matter where they are found on the beach. and perhaps physics based models might resolve the process down to the level that it can represent the different observed behaviours given just the profile information and hydrodynamic conditions (though I've been skeptical of this in the past based on the models I've worked with). but definitely at the coarse grain level we are describing the processes at with our simple linear model, we expect the parameter fits to be different at each site due to the different responses we observe to the same offshore storm.
 
-describes our model and the c
+so we will give each site it's own parameters which can be fit by the model. luckily we made a nice long table before and that will make it very easy for us to feed in the site parameter another category. if we specify to the model it needs three parameters for each beta, we can use the correct one of those betas for each data point depending on its site. so it model function now becomes. 
+
+you can see below we use plate to generate one parameter per site. and we selected which parameter applies to which data point depending on the site it belongs to given by the site id in cat. (xx just name it site id). 
+
+let's check our fit. nice, we have a very nicely converging model with parameters per site. 
+let's have a look at these values. I like this information a lot, it points to some of the more interesting points. we are very unsure about whether the direction variable should be in there or not. the bounds are wide and encompass zero. infact if we fit a model without it we do almost as well. again I'm not saying this is not commonplace in frequentist approaches too, but I find this way very clear.  
+
+but as the song goes - when it's comes to b-b-b-bayesy, you ain't seen nothing yet. the real power of Bayes comes from the ability of this workflow to scale to much much more complex models. the extra degree of freedom given by the prior, allows us to fully describe our beliefs about the data in a way that we only glimpsed in this example.
 
 ```{python echo=F}
 def linear_model_simple(X,cat,y=None):
@@ -663,7 +670,7 @@ for ax in axs:
 plt.tight_layout()
 ```
 
-Too often we can get trapped thinking about a fixed model structure being repeatedly applied at different locations. I would argue that where possible we should think about data more whollistically, we are modelling a very similar process at three separate locations. So why not fit all the data within a single model, *categorised* by location?
+Too often we can get trapped thinking about a fixed model structure being repeatedly applied at different locations. I would argue that where possible we should think about data more whollistically, we are modelling a very similar process at three separate locations. So why not fit all the data within a single model, *categorised* by location as we did above?
 
 This opens up a very cool (:fire:?) possibility: sharing information about model parameters between locations. Sharing is caring after all and our models, doing their best to interpret the messy environmental data we give them, often need a little bit of TLC.
 
