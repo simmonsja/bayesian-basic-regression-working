@@ -1,31 +1,39 @@
 ---
 title: "Bayesian linear regression example"
 theme: flatly
+from: markdown+emoji
 format:
   html:
     toc: true
     number-sections: true
 editor: source
+execute:
+  cache: true
 ---
 
-# Bayesian linear regression example
-
-## An ode to linear regressions
+# An ode to linear regressions
 
 Good old fashioned, handful of parameters linear regressions are great!
 
 Don't get me wrong I love fitting larger machine learning (ML) models and when you're after raw predictive power there's nothing better than finally getting that  huge neural networking singing. But in so many applications where you would employ data-driven models, linear regression models (and variations thereof) can hold their own and often be better suited to the project as a whole. 
 
-There's something very tangible about knowing all the parameters in your model. A tight knit group that you can all call friends when you push that final model to your github repo. As ML models get larger, at best they're are filled with acquaintances. More often you're left anxiously gazing into the black-box abyss just hoping to recognise a friendly face.
+There's something very tangible about knowing all the parameters in your model. A tight knit group that you can all call friends when you push that final project deliverable out the door. As ML models get larger, at best they're are filled with acquaintances. More often you're left anxiously gazing into the black-box abyss just hoping to recognise a friendly face.
 
-For a while now my default fit for linear regressions has been Bayesian. Sure uncertainty quantification is :fire:, but really it's the flexibility afforded by a Bayesian framework which lets you guide and extend on simple models to provide just the right level of complexity. Actually this post is really a vehicle to a future post which will dive into some of this flexibility and really show off the interesting aspect (hint: it'll be plenty hierarchical). But we have to get on the bus somewhere, and this is the stop closest to home. 
+For a while now my default method for fitting linear regressions has been Bayesian. Sure uncertainty quantification is :fire:, but really it's the flexibility afforded by a Bayesian framework which lets you guide and extend on simple models to provide just the right level of complexity. Actually this post is really a vehicle to a future post which will dive into some of this flexibility and really show off the interesting aspects (hint: it'll be plenty hierarchical). But we have to get on the bus somewhere, and this is the stop closest to home. 
 
 I will say though, that you pay for all these flashy uncertainty bands et al. with a (mostly very modest) computational cost. Sometimes it can sneak up on you for more complex models, but for a lot of problems in the environmental space the time difference is small on modern compute. I've skimmed through enough articles to know attention spans are shorter than ever, or something to that effect, but surely we can spare a extra seconds to give our model a glow up.
 
 ## What this is and what this is not
 
-- a very practical implementation based introduction to Bayesian methods
-- it is not a comprehensive guide, and I'll try refer to other books where more details are needed
+::: {.callout-tip}
+## IS
+A very practical implementation based introduction to Bayesian methods.
+:::
+
+::: {.callout-important}
+## IS NOT
+A comprehensive guide. I'll try refer to other books where more details are needed.
+:::
 
 ## The task
 
@@ -38,8 +46,12 @@ NB: This is not in any way meant to be knock on the use of a frequentist approac
 
 Anyway I hear you, pipe down and show me some data.
 
-```{python echo=F, results='hide', message=FALSE, warning=FALSE}
-#| echo: false
+# Beginning
+
+## The data
+
+```{python}
+#| include: false
 
 import os
 # cpu cores for sampling
@@ -78,7 +90,9 @@ As per the selected model in the paper, we will model the change in shoreline po
 
 We are going to make a little format adjustment just to make filtering easier, there are three separate locations along which shoreline change was measured at Narrabeen (named here as exposed, partially and sheltered). These are provided as columns and we will rework the dataframe to have only a single target variable (`dW`) and convert locations into a category.
 
-```{python echo=F}
+```{python}
+#| echo: false
+ 
 # Load data from the github repository for the aforementioned paper
 fn = 'https://raw.githubusercontent.com/raiibacetav/data-driven-storm-erosion/refs/heads/main/data.csv'
 raw_data = pd.read_csv(fn, index_col=0)
@@ -87,7 +101,9 @@ display(raw_data.iloc[90:95])
 ```
 
 
-```{python echo=F}
+```{python}
+#| output: false
+
 # Define the variables we are interested in and rework the dataframe
 cases = [ 'dW_exposed','dW_partially', 'dW_sheltered']
 id_vars = ['Onset','Eocum','WLres','Tpeak','Dpo'] # our covariates and Onset for sanity
@@ -111,8 +127,9 @@ df.sort_values(by=['Onset','location'], inplace=True)
 df =  df.dropna().reset_index(drop=True)
 ```
 
-
-```{python echo=F}
+```{python}
+#| echo: false
+ 
 display(df.head())
 ```
 
@@ -157,491 +174,119 @@ $$
 \Delta W \sim \mathcal{N}(\mathbf{X} \mathbf{\beta}, \sigma)
 $$
 
-## A brief aside on fitting models
+# A brief aside on fitting models
 
-But, how the heck does this help us to fit a model? What do fit even mean in a Bayesian framework?
+But, how the heck does this help us to fit a model? What does fitting even mean in a Bayesian framework?
 
-In a Bayesian framework we are not aiming to learn a single set of "true" parameter values for our $\beta$'s and $\sigma$. That would be so very frequentist, instead we treat parameters as being probabilistic. Maybe there's a true value to be found, theoretically if we had the perfect model and infinite data (environmental systems never play this nice 🥲). There's no reason to get more into frequentist vs Bayesian approaches, I only bring it up as most people default to frequentist approaches. Both are great, both are useful, both can quantify uncertainty even. But this is a post about Bayes and that'll be that.
+In a Bayesian framework we are not aiming to learn a single set of "true" parameter values for our $\beta$'s and $\sigma$. That would be so very frequentist, and so instead we treat parameters as being probabilistic. It only makes sense to talk about how probable certain values are for the parameters and the range of values that are plausible in our model. Maybe there's a true value to be found. Theoretically if we had the perfect model and infinite data... yeah no, that's never going happen modelling an environment system 🥲. 
 
-To get to out posterior distribution we need three things:
+There's no reason to get more into frequentist vs Bayesian approaches, I only bring it up to highlight the difference as most people default to frequentist approaches. Both are great, both are useful, both can quantify uncertainty even. But this is a post about Bayes and that'll be that.
 
-- a model that includes a specified likelihood function
-- prior distributions for each of our paramaters
-- data
+We call the description of probable values for our parameters the posterior distribution. To get to out posterior distribution we need three things:
 
-Our assumptions about the form of the model and the data generating process that we specified above give rise to a likelihood. The likelihood is a measure of how likely the data are given the model and a set of parameter values. By specifying 
+1. a model that includes a specified likelihood function
+2. prior distributions for each of our paramaters
+3. data
 
+### Likelihood
 
+The likelihood is a measure of how likely the data are given the model and a set of parameter values. The better fit that a set of parameter values gives, the more we should believe that those values are plausible. Notice the little flip we did there, the Bayes rule helps us to navigate from the likelihood of the data given the parameters to the posterior distribtuion for the paramaters given the data (please see further reading at the end of this section for a more comprehensive introduction to Bayes). Luckily for us, our assumptions about the form of the model and the data generating process that we specified above give rise to a likelihood. By using a Probabilistic Programming Language (PPL) like NumPyro to specify our model, we get it without breaking a sweat.
 
-We're not going to be able to answer this fully, but lets build some inituition. Using a Bayesian approach we are setting out to find the posterior distrbituion of our parameters ($\mathbf{\beta}$ and $\sigma$). 
+Let's have a quick look at an example below. I am going to generate some synthetic data below to relate `x` to `y` with a simple linear relationship plus guassian noise.
 
-Our machine for obtaining samples to build a picture of the posterior is going to be Markov Chain Monte Carlo (MCMC). For a great introduction to MCMC see [this lecture](https://youtu.be/rZk2FqX2XnY?si=UpGAmJ3LEGXtGSz-&t=610) from Richard McElreath's great Statistical Rethinking course.
-
-```{python echo=F}
+```{python}
+#| include: false
+ 
 import numpy as np
 import numpyro
 import numpyro.distributions as dist
 import matplotlib.pyplot as plt
 import seaborn as sns
-
-# make dummy data y = 0.1 x + 0.2 + noise (0.1)
 np.random.seed(0)
-X = np.random.randn(100)
-y = 0.1 * X + 0.2 + 0.1 * np.random.randn(100)
+```
+
+```{python}
+# make dummy data y = 0.1 x + 0.2 + N(0, 0.1)
+x = np.random.randn(100)
+y = 0.1 * x + 0.2 + 0.1 * np.random.randn(100)
+```
+
+We then specify a linear regression model in NumPyro (I'm just teasing this here sorry, we will learn how to do this below). Then, given some propsed values for the parameters, NumPyro will tell us the log-likelihood for these values given the model and the data. Sweet. 
+
+```{python}
+#| include: false
 
 # build a simple model of this in NumPyro
-def model(X, y=None):
+def model(x, y=None):
     # Define priors
     beta_0 = numpyro.sample("beta_0", dist.Normal(0, 1))
     beta_1 = numpyro.sample("beta_1", dist.Normal(0, 1))
     sigma = numpyro.sample("sigma", dist.Exponential(1))
     # Define the model
-    mu = beta_0 + beta_1 * X
+    mu = beta_0 + beta_1 * x
     # store the model prediction before we account for the error
     numpyro.deterministic("mu", mu)
     # and then finally sample so we can compare to our observations
     numpyro.sample("y_out", dist.Normal(mu, sigma), obs=y)
 
 # generate 10 possible solutions
-proposed_solutions = {
+proposed_values = {
     "beta_0" : np.array([0.2, 0.1, 0.05, 0.19, 0.21, 0.4, 0.45, 0.25, 0.05, 0.2]),
     "beta_1" : np.array([0.1, 0.2, 0.05, 0.11, 0.09, 0, -0.1, 0.15, 0.2, 0.3]),
     "sigma" : np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
 }
-
-loglik = numpyro.infer.util.log_likelihood(
-    model = model, 
-    posterior_samples = proposed_solutions,
-    X = X, 
-    y = y
-)
-
-# plot the predicted line of each of the proposed solutions coloured by the log likelihood and the data
-# sns.set_theme(font_scale=1.5, style="whitegrid")
-plt.figure(figsize=(8,6))
-plt.scatter(X, y, color="black", s=10)
-for i in range(len(loglik['y_out'])):
-    # and weight the width of the line by the log likelihood
-    plt.plot(X, X * proposed_solutions['beta_1'][i] + proposed_solutions['beta_0'][i], color=plt.cm.viridis(loglik['y_out'][i].mean()), alpha=0.5, lw = 2)
-plt.xlabel("X")
-plt.ylabel("y")
-plt.colorbar(label="log likelihood")
-plt.show()
-
-print(loglik['y_out'].mean(axis=1))
 ```
 
+```{python}
+loglik = numpyro.infer.util.log_likelihood(
+    model = model, 
+    posterior_samples = proposed_values,
+    x = x, 
+    y = y
+)
+```
 
+::: {.callout-note}
+For the graph below: the higher the likelihood the better (hence why you may have heard of maximum likelihood estimation).
+:::
 
-For our purposes, for the rest of this blog we are going to treat the fitting process as a magic. Please go and read more from many better sources than I to build an understanding of MCMC. But for us. We specify the data generating process with our model. Then the NumPyro sampling fairy appears from nowhere, pries open the chassis of my laptop and greedily feeds on the power being fed to my CPU for a period of seconds to minutes. The gorged fairy then waves its magic wand and voilà, samples from the posterior distribution are delivered into memory.
+```{python}
+#| echo: false
 
-**The blood of the CPU will keep you alive, even if you're an inch from death, but at a terrible price.**
+# plot the predicted line of each of the proposed solutions coloured by the log likelihood and the data
+fig, ax = plt.subplots(figsize=(5,3.5))
+ax.scatter(x, y, color="black", s=10)
+
+# Get the min and max log likelihood values
+vmin = loglik['y_out'].mean(axis=1).min()
+vmax = loglik['y_out'].mean(axis=1).max()
+
+for i in range(len(loglik['y_out'])):
+    # and weight the width of the line by the log likelihood
+    ax.plot(x, x * proposed_values['beta_1'][i] + proposed_values['beta_0'][i], color=plt.cm.viridis((loglik['y_out'][i].mean() - vmin) / (vmax - vmin)), alpha=0.75, lw=2)
+
+ax.set_xlabel("x", fontsize=14)
+ax.set_ylabel("y", fontsize=14)
+ax.grid(True, which='both', linestyle='--', linewidth=0.5, color='lightgrey')
+
+sm = plt.cm.ScalarMappable(cmap="viridis", norm=plt.Normalize(vmin=vmin, vmax=vmax))
+sm.set_array([])
+fig.colorbar(sm, ax=ax, label="log-likelihood")
+plt.show()
+```
+
+### Relax and let the machine do its job
+
+We are going to talk more about prior distrbiutions below, but for now all we need to know is that the model needs us to work with it. Infinity is an infinitely large space, and without some guidance we are sending our model out in the big wide world all alone. We use prior knowledge to define some reasonable space in which we expect to find plausible values for our parameters. The aim is to give the model a nice wide field to explore but not have it wander off a cliff. In environmental science its fairly easy to define what's silly. For example, can a shoreline erode $100,000 m$ during a storm event? If it could we'd be in strife so we can pretty safely give very little probability to parameter values that produce such outlandish numbers. We use prior distributions to impart this belief on the model leaving it then explore with this information, the data, and the likelihood function.
+
+Our machine for obtaining samples to build a picture of the posterior distribution for our parameters is going to be Markov Chain Monte Carlo (MCMC). For a great introduction to MCMC see [this lecture](https://youtu.be/rZk2FqX2XnY?si=UpGAmJ3LEGXtGSz-&t=610) from Richard McElreath's great Statistical Rethinking course.
+
+For our purposes and for the rest of this blog we are going to treat the process of obtaining the posterior distribution as a magic. Please go and read more from many better sources than I to build an understanding of MCMC. But for us, we specify the data generating process with our model. Then the NumPyro sampling fairy appears from nowhere, pries open the chassis of my laptop and greedily feeds on the power being fed to my CPU for a period of seconds to minutes. The gorged fairy, now satiated, waves its magic wand and voilà! Samples from the posterior distribution are delivered into memory, rendered into figures, and subsequently delivered express to our eyeballs.
+
+::: {.callout-tip}
+## Tip
+The blood of the CPU will keep you alive, even if you're an inch from death, but at a terrible price...
+:::
 
 - we need to fit the params ($\mu$ or the betas that make up $\mu$, and $\sigma$) based on how well they explain the data
 "What this means, recall, is that the machine considers every possible combination of the  parameter values. With a linear model, some of the parameters now stand for the strength  of association between the mean of the outcome, µ, and the value of some other variable.  For each combination of values, the machine computes the posterior probability, which is  a measure of relative plausibility, given the model and data. So the posterior distribution  ranks the infinite possible combinations of parameter values by their logical plausibility."
-
-```{python echo=F}
-def linear_model_simple(X,cat,y=None):
-    '''
-    Define linear model with priors for the parameters and model error
-    Inputs:
-        energy: storm energy
-        dshl: observed shoreline change
-    '''
-    # Define priors
-    with numpyro.plate("cats", n_cat):
-        intercept = numpyro.sample("intercept",dist.Normal(0, 10)) 
-        b_Eocum = numpyro.sample("b_Eocum",dist.Normal(0, 10)) 
-        b_WLres = numpyro.sample("b_WLres",dist.Normal(0, 10))
-        b_Tpeak = numpyro.sample("b_Tpeak",dist.Normal(0, 10))
-        b_sinDrel = numpyro.sample("b_sinDrel",dist.Normal(0, 10))
-        b_Wpre = numpyro.sample("b_Wpre",dist.Normal(0, 10)) 
-    # jax.debug.print("{}",b_WLres)
-        sigma = numpyro.sample("sigma",dist.Exponential(1))
-
-    # jax.debug.print("{}",intercept[cat])
-
-    mu = b_Eocum[cat] * X[:,0] + b_WLres[cat] * X[:,1] + b_Tpeak[cat] * X[:,2] + b_sinDrel[cat] * X[:,3] + b_Wpre[cat] * X[:,4] + intercept[cat]
-
-    # store the model prediction before we account for the error
-    numpyro.deterministic("mu", mu)
-    # and then finally sample so we can compare to our observations
-    numpyro.sample("y_out", dist.Normal(mu, sigma[cat]), obs=y)
-```
-
-```{python echo=F}
-def linear_model(X,cat,y=None):
-    '''
-    Define linear model with priors for the parameters and model error
-    Inputs:
-        energy: storm energy
-        dshl: observed shoreline change
-    '''
-
-    intercept_bar = numpyro.sample("intercept_bar",dist.Normal(0, 10)) 
-    b_Eocum_bar = numpyro.sample("b_Eocum_bar",dist.Normal(0, 10)) 
-    b_WLres_bar = numpyro.sample("b_WLres_bar",dist.Normal(0, 10))
-    b_Tpeak_bar = numpyro.sample("b_Tpeak_bar",dist.Normal(0, 10))
-    b_sinDrel_bar = numpyro.sample("b_sinDrel_bar",dist.Normal(0, 10))
-    b_Wpre_bar = numpyro.sample("b_Wpre_bar",dist.Normal(0, 10)) 
-
-    # Define priors
-    tau = 0.1
-    with numpyro.plate("cats", n_cat):
-        intercept = numpyro.sample("intercept",dist.Normal(intercept_bar, tau)) 
-        b_Eocum = numpyro.sample("b_Eocum",dist.Normal(b_Eocum_bar, tau)) 
-        b_WLres = numpyro.sample("b_WLres",dist.Normal(b_WLres_bar, tau))
-        b_Tpeak = numpyro.sample("b_Tpeak",dist.Normal(b_Tpeak_bar, tau))
-        b_sinDrel = numpyro.sample("b_sinDrel",dist.Normal(b_sinDrel_bar, tau))
-        b_Wpre = numpyro.sample("b_Wpre",dist.Normal(b_Wpre_bar, tau)) 
-
-    # jax.debug.print("{}",b_WLres)
-        sigma = numpyro.sample("sigma",dist.Exponential(1))
-
-    # jax.debug.print("{}",intercept[cat])
-
-    mu = b_Eocum[cat] * X[:,0] + b_WLres[cat] * X[:,1] + b_Tpeak[cat] * X[:,2] + b_sinDrel[cat] * X[:,3] + b_Wpre[cat] * X[:,4] + intercept[cat]
-
-    # store the model prediction before we account for the error
-    numpyro.deterministic("mu", mu)
-    # and then finally sample so we can compare to our observations
-    numpyro.sample("y_out", dist.Normal(mu, sigma[cat]), obs=y)
-```
-
-```{python echo=F}
-avg_dir = 135 #in degrees
-df =  df_storms.copy()
-df['sinDrel'] = np.sin((df['Dpo']-avg_dir)*np.pi/180)
-df
-
-X = jnp.array(df[id_vars+['Wpre']].values)
-cat = jnp.array(df['variable'].astype('category').cat.codes).astype(jnp.int32)
-y = jnp.array(df['value'].values)
-
-X = (X - X.mean(axis=0))/X.mean(axis=0)
-
-y_mean = y.mean() 
-y_scale = y.std() 
-y = (y-y_mean)/y_scale
-
-n_cat = df['variable'].astype('category').cat.codes.max()+1
-
-```
-
-
-```{python echo=F}
-# JAX requires a key for random number generation
-rng_key_ = random.PRNGKey(2101)
-# here take 100 samples from our priors and make predictions on x_log
-prior_samples = Predictive(linear_model, num_samples=500)(
-    rng_key_, X=X, cat=cat
-)
-prior_samples = {k: jnp.expand_dims(v,axis=0) for k, v in prior_samples.items()}
-# and put this into arviz for easy plotting
-arviz_priors = az.from_dict(
-    prior=prior_samples
-)
-arviz_priors
-
-```
-
-
-```{python echo=F}
-var_names = ['b_{}'.format(_) for _ in id_vars]
-
-```
-
-
-```{python echo=F}
-# and now plot the distributions and the simulated data
-print('#'*80)
-print('Priors')
-priors_ax = az.plot_trace(
-    arviz_priors.prior, 
-    var_names=var_names,
-    figsize=(8,6),
-    rug=True,
-    show=False,
-    combined=True
-)
-# make it readable
-plt.subplots_adjust(hspace=0.5)
-plt.show()
-
-```
-
-# Now we sample
-
-```{python echo=F}
-
-# settings 
-num_samples = 1000
-num_warmup = num_samples
-num_chains = 3
-ci = 0.89
-
-# JAX requires a key for random number generation
-rng_key_ = random.PRNGKey(2101)
-
-# define the sampler - No U-Turn Sampler (NUTS)
-kernel = NUTS(linear_model)
-
-# define the mcmc wrapper
-mcmc_obj = MCMC(
-    kernel, 
-    num_warmup=num_warmup, 
-    num_samples=num_samples,
-    num_chains=num_chains
-)
-
-# now run the sampler for num_samples+burnin
-mcmc_obj.run(
-    rng_key_, X=X, cat=cat, y=y
-)
-mcmc_obj.print_summary()
-# get the samples which will form our posterior
-samples = mcmc_obj.get_samples()
-
-# get the samples for predictive uncertainty (our linear model + error)
-posterior_predictive = Predictive(linear_model, samples)(
-    rng_key_, X=X, cat=cat, y=y
-)
-
-# get the mean model prediciton
-mean_mu = jnp.mean(posterior_predictive['mu'], axis=0)
-# hpdi is used to compute the credible intervals corresponding to ci
-hpdi_mu = hpdi(posterior_predictive['mu'], ci)
-hpdi_sim_y = hpdi(posterior_predictive['y_out'], ci)
-
-arviz_posterior = az.from_numpyro(
-    mcmc_obj,
-    prior=prior_samples,
-    posterior_predictive=posterior_predictive,
-)
-# arviz_posterior
-```
-
-
-```{python echo=F}
-# JAX requires a key for random number generation
-rng_key_ = random.PRNGKey(2101)
-
-# define the sampler - No U-Turn Sampler (NUTS)
-kernel = NUTS(linear_model_simple)
-
-# define the mcmc wrapper
-mcmc_obj_simple = MCMC(
-    kernel, 
-    num_warmup=num_warmup, 
-    num_samples=num_samples,
-    num_chains=num_chains
-)
-
-# now run the sampler for num_samples+burnin
-mcmc_obj_simple.run(
-    rng_key_, X=X, cat=cat, y=y
-)
-mcmc_obj_simple.print_summary()
-# get the samples which will form our posterior
-samples_simple = mcmc_obj.get_samples()
-
-# get the samples for predictive uncertainty (our linear model + error)
-posterior_predictive_simple = Predictive(linear_model_simple, samples_simple)(
-    rng_key_, X=X, cat=cat, y=y
-)
-
-# get the mean model prediciton
-mean_mu_simple = jnp.mean(posterior_predictive_simple['mu'], axis=0)
-# hpdi is used to compute the credible intervals corresponding to ci
-hpdi_mu_simple = hpdi(posterior_predictive_simple['mu'], ci)
-hpdi_sim_y_simple = hpdi(posterior_predictive_simple['y_out'], ci)
-
-arviz_posterior_simple = az.from_numpyro(
-    mcmc_obj_simple,
-    posterior_predictive=posterior_predictive_simple,
-)
-# arviz_posterior
-
-```
-
-
-```{python echo=F}
-
-print('#'*80)
-print('Posterior')
-az.plot_trace(
-    arviz_posterior,
-    var_names=var_names + ['intercept'],
-    figsize=(8,6),
-    show=False
-)
-# make it readable
-plt.subplots_adjust(hspace=0.5)
-plt.show()
-```
-
-
-```{python echo=F}
-print('#'*80)
-print('Posterior')
-az.plot_forest(
-    [arviz_posterior, arviz_posterior_simple],
-    var_names=var_names+ ['intercept'],
-    figsize=(4,10),
-    combined=True
-)
-
-```
-
-
-
-```{python echo=F}
-results_df = df[['variable','value']].copy()
-results_df['mod_y'] = mean_mu * y_scale + y_mean
-results_df
-results_df_simple  = df[['variable','value']].copy()
-results_df_simple ['mod_y'] = mean_mu_simple * y_scale + y_mean
-results_df_simple 
-
-```
-
-
-
-```{python echo=F}
-
-fig,axs = plt.subplots(1,3,figsize = (15,5))
-axs =  axs.ravel()
-RMSE = [] 
-R2   = []
-colors = ['tab:blue','tab:orange','tab:green']
-storms = []
-for i,case in enumerate(cases):
-    case_results_df = results_df[results_df['variable']==case]
-    score = r2_score(case_results_df['value'].values,case_results_df['mod_y'].values) #Coef of determination
-    rmse = np.sqrt(mean_squared_error(case_results_df['value'].values,case_results_df['mod_y'].values)) #root mean squared error
-
-    #Plot
-    textstr = '\n'.join((r'$R^{2}=%.2f$' % (score, ),
-                            r'RMSE=$%.1f$ m' % (rmse, )))
-    props = dict(boxstyle='round', facecolor='lightgrey')
-    axs[i].text(0.03, 0.14, textstr, transform=axs[i].transAxes, fontsize=10,
-            verticalalignment='top', bbox=props)
-    axs[i].plot(case_results_df['value'].values,case_results_df['mod_y'].values,'.', label = None, color = colors[i],markersize=8)
-    axs[i].plot(np.arange(-30,45,0.5),np.arange(-30,45,0.5),linestyle = 'dashed', color = 'black',label = '1:1')
-    axs[i].set_xlim([-20,45])
-    axs[i].set_ylim([-15,30])
-    axs[i].axvline(x=0, color = 'lightgrey', linestyle = 'dashed')
-    axs[i].axhline(y=0, color = 'lightgrey', linestyle = 'dashed')
-    axs[i].set_xlabel(r'$\Delta W$'+'(m) - observed')
-    axs[i].set_ylabel(r'$\Delta W$'+'(m) - multi-linear regression')
-    axs[i].legend(loc = 'lower right')
-    axs[i].set_title(CASES[i])  
-
-    fig.suptitle(r'$\Delta W$' + ' - Descriptive approach')
-    for ax in axs:
-        ax.grid(linestyle = 'dashed', color = 'lightgrey')
-    plt.tight_layout()
-plt.show()
-```
-
-
-
-```{python echo=F}
-fig,axs = plt.subplots(1,3,figsize = (15,5))
-axs =  axs.ravel()
-RMSE = [] 
-R2   = []
-colors = ['tab:blue','tab:orange','tab:green']
-storms = []
-for i,case in enumerate(cases):
-    case_results_df = results_df_simple[results_df_simple['variable']==case]
-    score = r2_score(case_results_df['value'].values,case_results_df['mod_y'].values) #Coef of determination
-    rmse = np.sqrt(mean_squared_error(case_results_df['value'].values,case_results_df['mod_y'].values)) #root mean squared error
-
-    #Plot
-    textstr = '\n'.join((r'$R^{2}=%.2f$' % (score, ),
-                            r'RMSE=$%.1f$ m' % (rmse, )))
-    props = dict(boxstyle='round', facecolor='lightgrey')
-    axs[i].text(0.03, 0.14, textstr, transform=axs[i].transAxes, fontsize=10,
-            verticalalignment='top', bbox=props)
-    axs[i].plot(case_results_df['value'].values,case_results_df['mod_y'].values,'.', label = None, color = colors[i],markersize=8)
-    axs[i].plot(np.arange(-30,45,0.5),np.arange(-30,45,0.5),linestyle = 'dashed', color = 'black',label = '1:1')
-    axs[i].set_xlim([-20,45])
-    axs[i].set_ylim([-15,30])
-    axs[i].axvline(x=0, color = 'lightgrey', linestyle = 'dashed')
-    axs[i].axhline(y=0, color = 'lightgrey', linestyle = 'dashed')
-    axs[i].set_xlabel(r'$\Delta W$'+'(m) - observed')
-    axs[i].set_ylabel(r'$\Delta W$'+'(m) - multi-linear regression')
-    axs[i].legend(loc = 'lower right')
-    axs[i].set_title(CASES[i])  
-
-    fig.suptitle(r'$\Delta W$' + ' - Descriptive approach')
-    for ax in axs:
-        ax.grid(linestyle = 'dashed', color = 'lightgrey')
-    plt.tight_layout()
-plt.show()
-
-```
-
-
-```{python echo=F}
-
-fig,axs = plt.subplots(1,3,figsize = (15,5))
-axs =  axs.ravel()
-RMSE = [] 
-R2   = []
-colors = ['tab:blue','tab:orange','tab:green']
-storms = []
-
-for i,case in enumerate(cases):
-    
-    casewi = 'Wpre'+case[2:]
-    df =  df_storms.copy()
-    df['sinDrel'] = np.sin((df['Dpo']-avg_dir)*np.pi/180)
-    
-    df =  df[['Eocum','WLres','Tpeak','sinDrel',casewi, case]]
-    
-    #renaming
-    df.columns = ['CumEOff', 'WLres','Tpeak','sinDrel','Wpre', 'dW']
-    
-    df =  df.dropna()   
-
-    #Linear regression with intercept
-    LR = LinearRegression(fit_intercept=True) 
-    LR.fit(df[['CumEOff', 'WLres', 'Tpeak', 'sinDrel', 'Wpre']],df.dW)
-    
-    
-    y_prediction =  LR.predict(df[['CumEOff', 'WLres', 'Tpeak', 'sinDrel', 'Wpre']])
-    
-    score=r2_score(df.dW,y_prediction) #Coef of determination
-    rmse = np.sqrt(mean_squared_error(df.dW,y_prediction)) #root mean squared error
-    
-    #Plot
-    
-    textstr = '\n'.join((r'$R^{2}=%.2f$' % (score, ),
-                         r'RMSE=$%.1f$ m' % (rmse, )))
-    props = dict(boxstyle='round', facecolor='lightgrey')
-    axs[i].text(0.03, 0.14, textstr, transform=axs[i].transAxes, fontsize=10,
-            verticalalignment='top', bbox=props)
-    axs[i].plot(df['dW'],y_prediction,'.', label = None, color = colors[i],markersize=8)
-    axs[i].plot(np.arange(-30,45,0.5),np.arange(-30,45,0.5),linestyle = 'dashed', color = 'black',label = '1:1')
-    axs[i].set_xlim([-20,45])
-    axs[i].set_ylim([-15,30])
-    axs[i].axvline(x=0, color = 'lightgrey', linestyle = 'dashed')
-    axs[i].axhline(y=0, color = 'lightgrey', linestyle = 'dashed')
-    axs[i].set_xlabel(r'$\Delta W$'+'(m) - observed')
-    axs[i].set_ylabel(r'$\Delta W$'+'(m) - multi-linear regression')
-    axs[i].legend(loc = 'lower right')
-    axs[i].set_title(CASES[i])  
-
-fig.suptitle(r'$\Delta W$' + ' - Descriptive approach')
-for ax in axs:
-    ax.grid(linestyle = 'dashed', color = 'lightgrey')
-plt.tight_layout()
-```
-
-Too often we can get trapped thinking about a fixed model structure being repeatedly applied at different locations. I would argue that where possible we should think about data more whollistically, we are modelling a very similar process at three separate locations. So why not fit all the data within a single model, *categorised* by location?
-
-This opens up a very cool (:fire:?) possibility: sharing information about model parameters between locations. Sharing is caring after all and our models, doing their best to interpret the messy environmental data we give them, often need a little bit of TLC.
-
-I'll leave it there with this absolute cliff hanger, tune in next time for more.
