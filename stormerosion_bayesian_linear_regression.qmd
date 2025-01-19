@@ -304,6 +304,11 @@ The blood of the CPU will keep you alive, even if you"re an inch from death, but
 
 # Back to business
 
+- Build a model of all three together
+- Build a model for each location separately
+- Compare the output
+- Hidden sanity check vs fit 3 seperately
+
 Now what we maybe have a little bit of intuition about how we get the elusive posterior distribution, let's turn back to our original example. We're going to look at how to mix the ingredients ready for sampling using the Bambi package. Bambi relies on the PyMC package as a PPL to construct the model and sample from the posterior distribution.
 
 ```{python}
@@ -319,14 +324,24 @@ For Bambi to work its magic, we need to supply it with a structure for the model
 - specifies the model that, given the data and the parameters, estimates the target (y)
 
 ```{python}
+# fit the smoothie model
+mod_smoothie = bmb.Model(
+        "dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres", # <1>
+        df, # <2>
+        family = "gaussian" # <3>
+    )
+fit_smoothie = mod_smoothie.fit(
+    draws = 2000
+)
+
 fit = []
 for location in df["location"].unique():
     # subset df to be only location
     df_sub = df.loc[df["location"] == location]
     mod = bmb.Model(
-        "dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres", # <1>
-        df_sub, # <2>
-        family = "gaussian" # <3>
+        "dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres",
+        df_sub,
+        family = "gaussian"
     )
     fit_raw = mod.fit(
         draws = 2000
@@ -385,8 +400,6 @@ mod_factors = bmb.Model(
     df, # <2>
     family = "gaussian" # <3>
 )
-
-
 ```
 
 ```{python}
@@ -396,7 +409,9 @@ fit_factors_raw = mod_factors.fit(
 ```
 
 ```{python}
+#| include: false
 # rename location to Intercept
+fit_factors = fit_factors_raw.copy()
 fit_factors.posterior = fit_factors_raw.posterior.rename({"location": "Intercept"})
 
 # add new coord "location" = "location_dim"
@@ -416,13 +431,12 @@ And now we can look at our beautiful posterior distributions.
 
 ```{python}
 az.plot_forest(
-    [fit, fit_factors],
+    [fit, fit_factors, fit_smoothie],
     var_names=["~sigma"],
     combined = True,
     hdi_prob = 0.89,
     figsize = (5, 8)
 )
-plt.show()
 ```
 
 you can see below we use plate to generate one parameter per site. and we selected which parameter applies to which data point depending on the site it belongs to given by the site id in cat. (xx just name it site id). 
