@@ -308,7 +308,7 @@ Now what we maybe have a little bit of intuition about how we get the elusive po
 
 ```{python}
 #| include: false
-
+import xarray as xr
 import arviz as az
 import bambi as bmb
 ```
@@ -319,11 +319,19 @@ For Bambi to work its magic, we need to supply it with a structure for the model
 - specifies the model that, given the data and the parameters, estimates the target (y)
 
 ```{python}
-mod = bmb.Model(
-    "dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres", # <1>
-    df, # <2>
-    family = "gaussian" # <3>
-)
+fit = []
+for location in df["location"].unique():
+    # subset df to be only location
+    df_sub = df.loc[df["location"] == location]
+    mod = bmb.Model(
+        "dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres", # <1>
+        df_sub, # <2>
+        family = "gaussian" # <3>
+    )
+    fit_raw = mod.fit(
+        draws = 2000
+    ).assign_coords({"location": location})
+    fit.append(fit_raw.posterior)
 ```
 
 1. the next bit I want to focus on is the model itself, it specifies the same equation we saw above with all our beta terms and the various columns of the data. this sounds feel familiar and is the engine of our model, defining how we expect the input to be related to the output ( in this case via a simple additive linear model). 
@@ -336,28 +344,30 @@ the final part describes our priors. let"s set them all as n(0,1).
 Now lets fit the model
 
 ```{python}
-fit = mod.fit(
-    draws = 2000
-)
+fit = xr.concat([_ for _ in fit], dim = "location")
 ```
 
 And now we can look at our beautiful posterior distributions.
 
 ```{python}
-az.plot_forest(
+ax1 = az.plot_forest(
     fit,
+    var_names=["~sigma", "~Intercept"],
     combined = True,
     hdi_prob = 0.89,
-    figsize = (5, 5)
+    figsize = (5, 6)
 )
+# loop through each y axis tick label and make it subscript the location
+ax1[0].set_yticklabels([_.get_text().replace("[", "$_{[").replace("]", "]}$") for _ in ax1[0].get_yticklabels()])
+# set x axis gridlines as grey
+ax1[0].grid(axis="x", color="lightgrey")
+plt.show()
 ```
-
-
 
 ```{python}
 az.plot_trace(
     fit,
-    var_names = ["Intercept", "WLres"],
+    var_names = ["Intercept", "sigma"],
     figsize = (5, 5)
 )
 az.rhat(fit)
@@ -375,23 +385,44 @@ mod_factors = bmb.Model(
     df, # <2>
     family = "gaussian" # <3>
 )
+
+
 ```
 
 ```{python}
-fit_factors = mod_factors.fit(
+fit_factors_raw = mod_factors.fit(
     draws = 2000
 )
+```
+
+```{python}
+# rename location to Intercept
+fit_factors.posterior = fit_factors_raw.posterior.rename({"location": "Intercept"})
+
+# add new coord "location" = "location_dim"
+fit_factors = fit_factors.assign_coords({"location": fit_factors.posterior["location_dim"].values})
+
+fit_factors.posterior["Intercept"] = fit_factors.posterior["Intercept"].rename({"location_dim": "location"})
+
+# now change Dpo, Eocum, Tqw1    peak, WLres, Wpre to have dimensions (chain, draw, location)
+for var in ["Dpo:location", "Eocum:location", "Tpeak:location", "WLres:location", "Wpre:location"]:
+    fit_factors.posterior[var] = fit_factors.posterior[var].rename({var.split(":")[0]+":location_dim": "location"})
+
+    fit_factors.posterior = fit_factors.posterior.rename({var: var.split(":")[0]})
+
 ```
 
 And now we can look at our beautiful posterior distributions.
 
 ```{python}
 az.plot_forest(
-    fit_factors,
+    [fit, fit_factors],
+    var_names=["~sigma"],
     combined = True,
     hdi_prob = 0.89,
     figsize = (5, 8)
 )
+plt.show()
 ```
 
 you can see below we use plate to generate one parameter per site. and we selected which parameter applies to which data point depending on the site it belongs to given by the site id in cat. (xx just name it site id). 
@@ -399,4 +430,4 @@ you can see below we use plate to generate one parameter per site. and we select
 let"s check our fit. nice, we have a very nicely converging model with parameters per site. 
 let"s have a look at these values. I like this information a lot, it points to some of the more interesting points. we are very unsure about whether the direction variable should be in there or not. the bounds are wide and encompass zero. infact if we fit a model without it we do almost as well. again I"m not saying this is not commonplace in frequentist approaches too, but I find this way very clear.  
 
-but as the song goes - when it"s comes to b-b-b-bayesy, you ain"t seen nothing yet. the real power of Bayes comes from the ability of this workflow to scale to much much more complex models. the extra degree of freedom given by the prior, allows us to fully describe our beliefs about the data in a way that we only glimpsed in this example.
+but bayesy you ain't seen nothing yet. the real power of Bayes comes from the ability of this workflow to scale to much much more complex models. the extra degree of freedom given by the prior, allows us to fully describe our beliefs about the data in a way that we only glimpsed in this example.
