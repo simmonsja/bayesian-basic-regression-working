@@ -129,6 +129,9 @@ df["location"] = df["location"].str.replace("dW_","")
 df.sort_values(by=["Onset","location"], inplace=True)
 # and lets get rid of any NaNs
 df =  df.dropna().reset_index(drop=True)
+# find the max and min of each column
+scale_max_vals = df.max()
+scale_min_vals = df.min()
 # finally, we normalise each covariate to be between 0 and 1
 for col in df.columns.drop(["Onset", "location"]):
     df[col] = (df[col] - df[col].min()) / (df[col].max() - df[col].min())
@@ -151,6 +154,55 @@ With this shift to categories, I am also signalling our intent down the track. M
 We follow the model provided in the paper:
 
 $$\Delta W = \beta_0 + \beta_1 E_{o,cum} + \beta_2 W_{pre} + \beta_3 D_{po} + \beta_4 T_{p,peak} + \beta_5 WL_{res} + \epsilon$$
+
+```{python}
+#| include: false
+
+# Here seems as good a spot as any to calculate the output of the paper's model
+# coeffs from the paper:
+coefficients = {
+    "exposed": {
+        "intercept": 0.113,
+        "Eocum": 0.296,
+        "Wpre": 0.222,
+        "Dpo": -0.128,
+        "Tpeak": 0.228,
+        "WLres": 0.168
+    },
+    "partially": {
+        "intercept": 0.132,
+        "Eocum": 0.592,
+        "Wpre": 0.271,
+        "Dpo": -0.154,
+        "Tpeak": 0.143,
+        "WLres": -0.032
+    },
+    "sheltered": {
+        "intercept": 0.312,
+        "Eocum": 0.389,
+        "Wpre": 0.139,
+        "Dpo": -0.200,
+        "Tpeak": -0.030,
+        "WLres": 0.002
+    }
+}
+
+# apply to df based on the location column
+# Function to calculate regression output
+def calculate_regression_output(this_row):
+    coeffs = coefficients[this_row["location"]]
+    return (coeffs["intercept"] +
+            coeffs["Eocum"] * this_row["Eocum"] +
+            coeffs["Wpre"] * this_row["Wpre"] +
+            coeffs["Dpo"] * this_row["Dpo"] +
+            coeffs["Tpeak"] * this_row["Tpeak"] +
+            coeffs["WLres"] * this_row["WLres"])
+
+# apply the function to the dataframe
+df["dW_pred"] = df.apply(calculate_regression_output, axis=1)
+
+```
+
 
 We have a model that predicts the change in shoreline ($\Delta W$) from the additive combination of our five variables (along with an intecept term $\beta_0$). 
 
@@ -327,26 +379,23 @@ For Bambi to work its magic, we need to supply it with a structure for the model
 # fit the smoothie model
 mod_smoothie = bmb.Model(
         "dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres", # <1>
-        df, # <2>
+        df, 
+        priors = {
+            "Intercept": bmb.Prior("Normal", mu=0, sigma=1),
+            "Eocum": bmb.Prior("Normal", mu=0, sigma=1),
+            "Wpre": bmb.Prior("Normal", mu=0, sigma=1),
+            "Dpo": bmb.Prior("Normal", mu=0, sigma=1),
+            "Tpeak": bmb.Prior("Normal", mu=0, sigma=1),
+            "WLres": bmb.Prior("Normal", mu=0, sigma=1),
+            "sigma": bmb.Prior("HalfNormal", sigma=1)
+        }, # <2>
         family = "gaussian" # <3>
     )
 fit_smoothie = mod_smoothie.fit(
     draws = 2000
 )
-
-fit = []
-for location in df["location"].unique():
-    # subset df to be only location
-    df_sub = df.loc[df["location"] == location]
-    mod = bmb.Model(
-        "dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres",
-        df_sub,
-        family = "gaussian"
-    )
-    fit_raw = mod.fit(
-        draws = 2000
-    ).assign_coords({"location": location})
-    fit.append(fit_raw.posterior)
+# and make predcictions (added to fit_smoothie)
+mod_smoothie.predict(fit_smoothie, kind = "response")
 ```
 
 1. the next bit I want to focus on is the model itself, it specifies the same equation we saw above with all our beta terms and the various columns of the data. this sounds feel familiar and is the engine of our model, defining how we expect the input to be related to the output ( in this case via a simple additive linear model). 
@@ -358,15 +407,12 @@ the final part describes our priors. let"s set them all as n(0,1).
 
 Now lets fit the model
 
-```{python}
-fit = xr.concat([_ for _ in fit], dim = "location")
-```
 
 And now we can look at our beautiful posterior distributions.
 
 ```{python}
 ax1 = az.plot_forest(
-    fit,
+    fit_smoothie,
     var_names=["~sigma", "~Intercept"],
     combined = True,
     hdi_prob = 0.89,
@@ -381,12 +427,72 @@ plt.show()
 
 ```{python}
 az.plot_trace(
-    fit,
+    fit_smoothie,
     var_names = ["Intercept", "sigma"],
     figsize = (5, 5)
 )
-az.rhat(fit)
+az.rhat(fit_smoothie)
 ```
+
+```{python}
+# plot the mean prediction of the model against the observed data
+plot_df = pd.DataFrame({
+    "dW": df["dW"],
+    "dW_pred": fit_smoothie.posterior["mu"].mean(dim=["chain", "draw"]).values,
+    "location": df["location"],
+    "dW_paper": df["dW_pred"]
+})
+
+# rescale dW, dW_pred and dW_paper to the original scale
+for col in ["dW", "dW_pred", "dW_paper"]:
+    plot_df[col] = plot_df[col] * (scale_max_vals["dW"] - scale_min_vals["dW"]) + scale_min_vals["dW"]
+
+# calcualte the R2 for each of dW_pred and dW_paper per location
+r2_pred = pd.DataFrame()
+r2_paper = pd.DataFrame()
+rmse_pred = pd.DataFrame()
+rmse_paper = pd.DataFrame()
+for this_loc in df["location"].unique():
+    this_df = plot_df.loc[plot_df["location"] == this_loc]
+    r2_pred.loc[this_loc, "r2"] = r2_score(this_df["dW"], this_df["dW_pred"])
+    r2_paper.loc[this_loc, "r2"] = r2_score(this_df["dW"], this_df["dW_paper"])
+    rmse_pred.loc[this_loc, "rmse"] = root_mean_squared_error(this_df["dW"], this_df["dW_pred"])
+    rmse_paper.loc[this_loc, "rmse"] = root_mean_squared_error(this_df["dW"], this_df["dW_paper"])
+# print(r2_pred)
+
+# plot a scatter that is facetted by location
+g = sns.FacetGrid(plot_df, col="location", col_wrap=3, height=3)
+g.map(sns.scatterplot, "dW", "dW_pred")
+g.set_axis_labels("Observed dW", "Predicted dW")
+# red dashed 1:1 line
+for ax in g.axes:
+    ax.plot([plot_df["dW"].min(), plot_df["dW"].max()], [plot_df["dW"].min(), plot_df["dW"].max()], color="red", linestyle="--", alpha=0.5)
+# print the R2 values in top left of each plot per location
+for ax, r2 in zip(g.axes, r2_pred["r2"].values):
+    ax.text(0.05, 0.95, f"R2: {r2:.2f}", transform=ax.transAxes, verticalalignment="top", fontsize=10)
+# print the RMSE values in top left underneath the R2 values
+for ax, rmse in zip(g.axes, rmse_pred["rmse"].values):
+    ax.text(0.05, 0.85, f"RMSE: {rmse:.2f}", transform=ax.transAxes, verticalalignment="top", fontsize=10)
+
+# now plot the same for the paper predictions in df["dW_pred"]
+
+g = sns.FacetGrid(plot_df, col="location", col_wrap=3, height=3)
+g.map(sns.scatterplot, "dW", "dW_paper")
+g.set_axis_labels("Observed dW", "Predicted dW")
+# red dashed 1:1 line
+for ax in g.axes:
+    ax.plot([plot_df["dW"].min(), plot_df["dW"].max()], [plot_df["dW"].min(), plot_df["dW"].max()], color="red", linestyle="--", alpha=0.5)
+# print the R2 values in top left of each plot per location
+for ax, r2 in zip(g.axes, r2_paper["r2"].values):
+    ax.text(0.05, 0.95, f"R2: {r2:.2f}", transform=ax.transAxes, verticalalignment="top", fontsize=10)
+# print the RMSE values
+for ax, rmse in zip(g.axes, rmse_paper["rmse"].values):
+    ax.text(0.05, 0.85, f"RMSE: {rmse:.2f}", transform=ax.transAxes, verticalalignment="top", fontsize=10)
+
+plt.show()
+```
+
+Hey! We're not doing to bad at all, but something's off at the partially sheltered locations.
 
 somethings going on here, we have multiple regions of the parameter space showing up as important and our model won"t converge. I'm afraid dear reader I've lead you deliberately down the wrong path to make a point. recall above that we are modelling data from 3 locations, each with different characteristics and likely different relationships between covariates and targets. it"s an easy fix to be sure, but I think it shows nicely how transparent a Bayesian model is. because you"re taking many samples from the posterior and visualising the spread, you can identify in a nice way the quirks of your model and data. yes we have taken a bit more time to set it up but at least for me I find the modelling process overall a lot more transparent and this gives me trust. not so much of a problem here where we are fitting a linear model but with more complex models very useful and the next blog post will show an example of this. 
 
@@ -431,7 +537,7 @@ And now we can look at our beautiful posterior distributions.
 
 ```{python}
 az.plot_forest(
-    [fit, fit_factors, fit_smoothie],
+    [fit_factors, fit_smoothie],
     var_names=["~sigma"],
     combined = True,
     hdi_prob = 0.89,
@@ -445,3 +551,33 @@ let"s check our fit. nice, we have a very nicely converging model with parameter
 let"s have a look at these values. I like this information a lot, it points to some of the more interesting points. we are very unsure about whether the direction variable should be in there or not. the bounds are wide and encompass zero. infact if we fit a model without it we do almost as well. again I"m not saying this is not commonplace in frequentist approaches too, but I find this way very clear.  
 
 but bayesy you ain't seen nothing yet. the real power of Bayes comes from the ability of this workflow to scale to much much more complex models. the extra degree of freedom given by the prior, allows us to fully describe our beliefs about the data in a way that we only glimpsed in this example.
+
+
+```{python}
+#| include: false
+
+# A check on the assumptions of shared sigma - factors vs indiv fit 
+fit = []
+for location in df["location"].unique():
+    # subset df to be only location
+    df_sub = df.loc[df["location"] == location]
+    mod = bmb.Model(
+        "dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres",
+        df_sub,
+        family = "gaussian"
+    )
+    fit_raw = mod.fit(
+        draws = 2000
+    ).assign_coords({"location": location})
+    fit.append(fit_raw.posterior)
+
+fit = xr.concat([_ for _ in fit], dim = "location")
+
+az.plot_forest(
+    [fit, fit_factors, fit_smoothie],
+    var_names=["~sigma"],
+    combined = True,
+    hdi_prob = 0.89,
+    figsize = (5, 8)
+)
+```
