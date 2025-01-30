@@ -52,6 +52,8 @@ Anyway I hear you, pipe down and show me some data.
 
 ```{python}
 #| include: false
+%load_ext autoreload
+%autoreload 2
 
 import os
 # cpu cores for sampling
@@ -76,6 +78,10 @@ from numpyro.diagnostics import hpdi
 import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer import Predictive
+
+
+from functions.plotting import plot_scatter_predictions
+from functions.utils import rescale_target, calculate_r2_rmse
 ```
 
 We load the data directly from the authors" github repo (thanks again!). I"m going to walk you through a bit of the data wrangling. I often find it illuminating to see the ways people transform data to get it "analysis ready", but is you wish to skip to the juicier bits below, be my guest.
@@ -129,12 +135,20 @@ df["location"] = df["location"].str.replace("dW_","")
 df.sort_values(by=["Onset","location"], inplace=True)
 # and lets get rid of any NaNs
 df =  df.dropna().reset_index(drop=True)
-# find the max and min of each column
-scale_max_vals = df.max()
-scale_min_vals = df.min()
-# finally, we normalise each covariate to be between 0 and 1
+```
+
+```{python}
+#| output: false
+#| 
+# find the max and min of each column - now we need to normalise as they did which is by the location
+scale_max_vals = df.groupby("location").max()
+scale_min_vals = df.groupby("location").min()
+# finally, we normalise each covariate to be between 0 and 1 based on location
 for col in df.columns.drop(["Onset", "location"]):
-    df[col] = (df[col] - df[col].min()) / (df[col].max() - df[col].min())
+    df["scale_max"] = df["location"].map(scale_max_vals[col])
+    df["scale_min"] = df["location"].map(scale_min_vals[col])
+    df[col] = (df[col] - df["scale_min"]) / (df["scale_max"] - df["scale_min"])
+    df = df.drop(columns=["scale_max", "scale_min"])
 ```
 
 After a bit of ugly wrangling we have our data in the format we want.
@@ -184,6 +198,34 @@ coefficients = {
         "Dpo": -0.200,
         "Tpeak": -0.030,
         "WLres": 0.002
+    }
+}
+
+# coeffs given by the fit in the github repo
+coefficients = {
+    "exposed": {
+        "intercept": 0.100764,
+        "Eocum": 0.297814,
+        "Wpre": 0.224563,
+        "Dpo": -0.111426,
+        "Tpeak": 0.150129,
+        "WLres": 0.163962
+    },
+    "partially": {
+        "intercept": 0.122073,
+        "Eocum": 0.595315,
+        "Wpre": 0.272799,
+        "Dpo": -0.137715,
+        "Tpeak": 0.11471,
+        "WLres": -0.036616
+    },
+    "sheltered": {
+        "intercept": 0.299397,
+        "Eocum": 0.39053,
+        "Wpre": 0.139078,
+        "Dpo": -0.184629,
+        "Tpeak": -0.019893,
+        "WLres": -0.004457
     }
 }
 
@@ -443,53 +485,65 @@ plot_df = pd.DataFrame({
     "dW_paper": df["dW_pred"]
 })
 
-# rescale dW, dW_pred and dW_paper to the original scale
-for col in ["dW", "dW_pred", "dW_paper"]:
-    plot_df[col] = plot_df[col] * (scale_max_vals["dW"] - scale_min_vals["dW"]) + scale_min_vals["dW"]
+plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals)
 
-# calcualte the R2 for each of dW_pred and dW_paper per location
-r2_pred = pd.DataFrame()
-r2_paper = pd.DataFrame()
-rmse_pred = pd.DataFrame()
-rmse_paper = pd.DataFrame()
-for this_loc in df["location"].unique():
-    this_df = plot_df.loc[plot_df["location"] == this_loc]
-    r2_pred.loc[this_loc, "r2"] = r2_score(this_df["dW"], this_df["dW_pred"])
-    r2_paper.loc[this_loc, "r2"] = r2_score(this_df["dW"], this_df["dW_paper"])
-    rmse_pred.loc[this_loc, "rmse"] = root_mean_squared_error(this_df["dW"], this_df["dW_pred"])
-    rmse_paper.loc[this_loc, "rmse"] = root_mean_squared_error(this_df["dW"], this_df["dW_paper"])
-# print(r2_pred)
+# calculate the R2 for each of dW_pred and dW_paper per location
+r2_scores, rmse_scores = calculate_r2_rmse(plot_df)
 
-# plot a scatter that is facetted by location
-g = sns.FacetGrid(plot_df, col="location", col_wrap=3, height=3)
-g.map(sns.scatterplot, "dW", "dW_pred")
-g.set_axis_labels("Observed dW", "Predicted dW")
-# red dashed 1:1 line
-for ax in g.axes:
-    ax.plot([plot_df["dW"].min(), plot_df["dW"].max()], [plot_df["dW"].min(), plot_df["dW"].max()], color="red", linestyle="--", alpha=0.5)
-# print the R2 values in top left of each plot per location
-for ax, r2 in zip(g.axes, r2_pred["r2"].values):
-    ax.text(0.05, 0.95, f"R2: {r2:.2f}", transform=ax.transAxes, verticalalignment="top", fontsize=10)
-# print the RMSE values in top left underneath the R2 values
-for ax, rmse in zip(g.axes, rmse_pred["rmse"].values):
-    ax.text(0.05, 0.85, f"RMSE: {rmse:.2f}", transform=ax.transAxes, verticalalignment="top", fontsize=10)
+plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_paper", title = "Paper predictions")
 
-# now plot the same for the paper predictions in df["dW_pred"]
+plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_pred", title = "Bayesian predictions")
+```
 
-g = sns.FacetGrid(plot_df, col="location", col_wrap=3, height=3)
-g.map(sns.scatterplot, "dW", "dW_paper")
-g.set_axis_labels("Observed dW", "Predicted dW")
-# red dashed 1:1 line
-for ax in g.axes:
-    ax.plot([plot_df["dW"].min(), plot_df["dW"].max()], [plot_df["dW"].min(), plot_df["dW"].max()], color="red", linestyle="--", alpha=0.5)
-# print the R2 values in top left of each plot per location
-for ax, r2 in zip(g.axes, r2_paper["r2"].values):
-    ax.text(0.05, 0.95, f"R2: {r2:.2f}", transform=ax.transAxes, verticalalignment="top", fontsize=10)
-# print the RMSE values
-for ax, rmse in zip(g.axes, rmse_paper["rmse"].values):
-    ax.text(0.05, 0.85, f"RMSE: {rmse:.2f}", transform=ax.transAxes, verticalalignment="top", fontsize=10)
 
-plt.show()
+```{python}
+# fit the smoothie model
+mod_int_smoothie = bmb.Model(
+        "dW ~ 0 + location + Eocum + Wpre + Dpo + Tpeak + WLres", # <1>
+        df, 
+        priors = {
+            "location": bmb.Prior("Normal", mu=0, sigma=1),
+            "Eocum": bmb.Prior("Normal", mu=0, sigma=1),
+            "Wpre": bmb.Prior("Normal", mu=0, sigma=1),
+            "Dpo": bmb.Prior("Normal", mu=0, sigma=1),
+            "Tpeak": bmb.Prior("Normal", mu=0, sigma=1),
+            "WLres": bmb.Prior("Normal", mu=0, sigma=1),
+            "sigma": bmb.Prior("HalfNormal", sigma=1)
+        }, # <2>
+        family = "gaussian" # <3>
+    )
+fit_int_smoothie = mod_int_smoothie.fit(
+    draws = 2000
+)
+# and make predcictions (added to fit_smoothie)
+mod_int_smoothie.predict(fit_int_smoothie, kind = "response")
+```
+
+```{python}
+# plot the mean prediction of the model against the observed data
+plot_df = pd.DataFrame({
+    "dW": df["dW"],
+    "dW_pred": fit_int_smoothie.posterior["mu"].mean(dim=["chain", "draw"]).values,
+    "location": df["location"],
+    "dW_paper": df["dW_pred"]
+})
+
+plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals)
+
+# calculate the R2 for each of dW_pred and dW_paper per location
+r2_scores, rmse_scores = calculate_r2_rmse(plot_df)
+
+plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_paper", title = "Paper predictions")
+
+plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_pred", title = "Bayesian intercept predictions")
+
+az.plot_forest(
+    [fit_smoothie, fit_int_smoothie],
+    var_names=["~sigma", "~mu"],
+    combined = True,
+    hdi_prob = 0.89,
+    figsize = (5, 8)
+)
 ```
 
 Hey! We're not doing to bad at all, but something's off at the partially sheltered locations.
