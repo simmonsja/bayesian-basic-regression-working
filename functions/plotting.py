@@ -22,5 +22,12 @@ def plot_scatter_predictions(data, r2_scores, rmse_scores, target_name="dW", tar
     fig = ax.get_figure()
     if title:
         fig.suptitle(title, y=1.05)
-        
+
     plt.show()
+
+def fix_forest_plots(ax):
+    # loop through each y axis tick label and make it subscript the location
+    ax.set_yticklabels([_.get_text().replace("[", "$_{[").replace("]", "]}$") for _ in ax.get_yticklabels()])
+    # set x axis gridlines as grey
+    ax.grid(axis="x", color="lightgrey")
+    return ax

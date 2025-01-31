@@ -73,7 +73,7 @@ import arviz as az
 import xarray as xr
 import bambi as bmb
 
-from functions.plotting import plot_scatter_predictions
+from functions.plotting import plot_scatter_predictions, fix_forest_plots
 from functions.utils import rescale_target, calculate_r2_rmse
 
 np.random.seed(2319)
@@ -150,7 +150,6 @@ After a bit of ugly wrangling we have our data in the format we want.
 
 ```{python}
 #| echo: false
- 
 display(df.head())
 ```
 
@@ -196,33 +195,33 @@ coefficients = {
     }
 }
 
-# # coeffs given by the fit in the github repo
-# coefficients = {
-#     "exposed": {
-#         "intercept": 0.100764,
-#         "Eocum": 0.297814,
-#         "Wpre": 0.224563,
-#         "Dpo": -0.111426,
-#         "Tpeak": 0.150129,
-#         "WLres": 0.163962
-#     },
-#     "partially": {
-#         "intercept": 0.122073,
-#         "Eocum": 0.595315,
-#         "Wpre": 0.272799,
-#         "Dpo": -0.137715,
-#         "Tpeak": 0.11471,
-#         "WLres": -0.036616
-#     },
-#     "sheltered": {
-#         "intercept": 0.299397,
-#         "Eocum": 0.39053,
-#         "Wpre": 0.139078,
-#         "Dpo": -0.184629,
-#         "Tpeak": -0.019893,
-#         "WLres": -0.004457
-#     }
-# }
+# coeffs given by the fit in the github repo
+coefficients = {
+    "exposed": {
+        "intercept": 0.100764,
+        "Eocum": 0.297814,
+        "Wpre": 0.224563,
+        "Dpo": -0.111426,
+        "Tpeak": 0.150129,
+        "WLres": 0.163962
+    },
+    "partially": {
+        "intercept": 0.122073,
+        "Eocum": 0.595315,
+        "Wpre": 0.272799,
+        "Dpo": -0.137715,
+        "Tpeak": 0.11471,
+        "WLres": -0.036616
+    },
+    "sheltered": {
+        "intercept": 0.299397,
+        "Eocum": 0.39053,
+        "Wpre": 0.139078,
+        "Dpo": -0.184629,
+        "Tpeak": -0.019893,
+        "WLres": -0.004457
+    }
+}
 
 # apply to df based on the location column
 # Function to calculate regression output
@@ -236,7 +235,7 @@ def calculate_regression_output(this_row):
             coeffs["WLres"] * this_row["WLres"])
 
 # apply the function to the dataframe
-df["dW_pred"] = df.apply(calculate_regression_output, axis=10)
+df["dW_pred"] = df.apply(calculate_regression_output, axis=1)
 
 ```
 
@@ -343,11 +342,11 @@ For the graph below: the higher the likelihood the better (hence why you may hav
 
 # plot the predicted line of each of the proposed solutions coloured by the log likelihood and the data
 fig, ax = plt.subplots(figsize=(5,3.5))
-ax.scatter(x, y, color="black", s=10)
+ax.scatter(x, y, color="black", s=1)
 
 # Get the min and max log likelihood values
-vmin = loglik["y_out"].mean(axis=10).min()
-vmax = loglik["y_out"].mean(axis=10).max()
+vmin = loglik["y_out"].mean(axis=1).min()
+vmax = loglik["y_out"].mean(axis=1).max()
 
 for i in range(len(loglik["y_out"])):
     # and weight the width of the line by the log likelihood
@@ -373,7 +372,7 @@ For our purposes and for the rest of this blog we are going to treat the process
 
 ::: {.callout-tip}
 ## Tip
-The blood of the CPU will keep you alive, even if you"re an inch from death, but at a terrible price...
+The blood of the CPU will keep you alive, even if you're an inch from death, but at a terrible price...
 :::
 
 - we need to fit the params ($\mu$ or the betas that make up $\mu$, and $\sigma$) based on how well they explain the data
@@ -397,7 +396,7 @@ For Bambi to work its magic, we need to supply it with a structure for the model
 # fit the smoothie model
 mod_smoothie = bmb.Model(
         "dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres", # <1>
-        df, 
+        df, # <2
         priors = {
             "Intercept": bmb.Prior("Normal", mu=0, sigma=10),
             "Eocum": bmb.Prior("Normal", mu=0, sigma=10),
@@ -406,28 +405,31 @@ mod_smoothie = bmb.Model(
             "Tpeak": bmb.Prior("Normal", mu=0, sigma=10),
             "WLres": bmb.Prior("Normal", mu=0, sigma=10),
             "sigma": bmb.Prior("HalfNormal", sigma=10)
-        }, # <2>
-        family = "gaussian" # <3>
+        }, # <3>
+        family = "gaussian" # <4>
     )
 fit_smoothie = mod_smoothie.fit(
     draws = 2000,
     idata_kwargs=dict(log_likelihood = True)
-)
+) # <5>
 # and make predcictions (added to fit_smoothie)
-mod_smoothie.predict(fit_smoothie, kind = "response")
+mod_smoothie.predict(fit_smoothie, kind = "response") # <6>
 ```
 
 1. the next bit I want to focus on is the model itself, it specifies the same equation we saw above with all our beta terms and the various columns of the data. this sounds feel familiar and is the engine of our model, defining how we expect the input to be related to the output ( in this case via a simple additive linear model). 
 
-2. Really the specification of the prior is the only new part from what the authors did in their paper. so we start by defining a function `linear_model()` that takes in x and y. you'll notice that y is optional. Our model is always generative and will produce estimates of the target when before fitting (thanks priors). we will use this as a handy check on our priors later in the piece. 
+2. Models, don't they love data.
+
+3. Really the specification of the prior is the only new part from what the authors did in their paper. so we start by defining a function `linear_model()` that takes in x and y. you'll notice that y is optional. Our model is always generative and will produce estimates of the target when before fitting (thanks priors). we will use this as a handy check on our priors later in the piece. 
 the final part describes our priors. let"s set them all as n(0,1). 
 
-3. the next part is specifying the form of the residuals or the distribution of observations given the model as we saw above. this defines our likelihood(XX check Vs the stan definition which is different I think as it includes the prior) as discussed above. 
+4. the next part is specifying the form of the residuals or the distribution of observations given the model as we saw above. this defines our likelihood(XX check Vs the stan definition which is different I think as it includes the prior) as discussed above. 
 
-Now lets fit the model
+5. Now lets fit the model, taking 2000 samples from the posterior
 
+6. Last of all we make predictions on the data using the model so that we can compare the fit to Figure 8 of the paper.
 
-And now we can look at our beautiful posterior distributions.
+And now we can look at our beautiful posterior distributions using the `arviz` package.
 
 ```{python}
 ax1 = az.plot_forest(
@@ -437,12 +439,11 @@ ax1 = az.plot_forest(
     hdi_prob = 0.89,
     figsize = (5, 6)
 )
-# loop through each y axis tick label and make it subscript the location
-ax1[0].set_yticklabels([_.get_text().replace("[", "$_{[").replace("]", "]}$") for _ in ax1[0].get_yticklabels()])
-# set x axis gridlines as grey
-ax1[0].grid(axis="x", color="lightgrey")
+fix_forest_plots(ax1[0])
 plt.show()
 ```
+
+You can see how sampling went via the trace
 
 ```{python}
 az.plot_trace(
@@ -452,6 +453,8 @@ az.plot_trace(
 )
 az.rhat(fit_smoothie)
 ```
+
+Finally, best until last - lets plot the predicitons of the model vs the data and compare to the paper to make sure we are on the right track.
 
 ```{python}
 # plot the mean prediction of the model against the observed data
@@ -472,6 +475,15 @@ plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_paper"
 plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_pred", title = "Bayesian predictions")
 ```
 
+Looking good, particularly for the partially sheltered location. But we are not matching the paper predictions and the keen eyed reader will understand why. We fit the model with no reference to the different locations. But, our data have heterogeneity - different responses to the same storm event at different locations. What we've fit is one parameter to rule them all (per variable).
+
+But don't worry, I've got your back dog. We set the data up at the start to make it really easy to build model complexity for this (whilst keeping the ability to extend into hierarchical models later on - more on this later).
+
+## A little more complexity
+
+In the first instance, we could consider that the three locations respond in the same way, but have a different mean value. For example, that $E_{o,cum}$ is always going to be a large, positively correlated driver of shoreline change, but that the overall average shoreline change for an average storm would be different when looking at a part of the beach that is sheltered/partially sheltered/exposed.
+
+Okay so lets add a group level intercept, i.e., a different intercept for each of our three locations.
 
 ```{python}
 # fit the location smoothie model
@@ -486,8 +498,8 @@ mod_int_smoothie = bmb.Model(
             "Tpeak": bmb.Prior("Normal", mu=0, sigma=10),
             "WLres": bmb.Prior("Normal", mu=0, sigma=10),
             "sigma": bmb.Prior("HalfNormal", sigma=10)
-        }, # <2>
-        family = "gaussian" # <3>
+        },
+        family = "gaussian"
     )
 fit_int_smoothie = mod_int_smoothie.fit(
     draws = 2000,
@@ -496,6 +508,10 @@ fit_int_smoothie = mod_int_smoothie.fit(
 # and make predcictions (added to fit_smoothie)
 mod_int_smoothie.predict(fit_int_smoothie, kind = "response")
 ```
+
+1. Note that we have updated the model now to have location (a factor) as a variable. This will create one intercept per location. We also add `0 +` to indicate to the model that we don't want an overall intercept term. This would be unidentfiable as this could just as well be abosrbed into the location intercepts.
+
+Lets see the differnce.
 
 ```{python}
 # plot the mean prediction of the model against the observed data
@@ -524,27 +540,36 @@ az.plot_forest(
 )
 ```
 
-Hey! We're not doing to bad at all, but something's off at the partially sheltered locations.
+Hey! Nice, you can see from the forest plot that the estimates for each parameter barely changed, but we now have those group level intercepts and we're lifting our performance a fair bit at the exposed location and a little at the sheltered location.
+
+This is nothing to scoff at, we explain a lot of the variability with common regression terms at all locations and a group level intercept. A nice model, and really not wholly unexpected. Beaches erode during storms, to varying degrees depending on the location, but we can expect that the physical drivers of shoreline change have similar effects along a single embayed beach such as this.
+
+Just like that we have stumbled into the the beginnings of a hierarchical model here, by a loose definition. Some parameters share information from the various groupings in the data and some are found seperately per group. We can get a little bit smarter about how we do this, in time...
 
 somethings going on here, we have multiple regions of the parameter space showing up as important and our model won"t converge. I'm afraid dear reader I've lead you deliberately down the wrong path to make a point. recall above that we are modelling data from 3 locations, each with different characteristics and likely different relationships between covariates and targets. it"s an easy fix to be sure, but I think it shows nicely how transparent a Bayesian model is. because you"re taking many samples from the posterior and visualising the spread, you can identify in a nice way the quirks of your model and data. yes we have taken a bit more time to set it up but at least for me I find the modelling process overall a lot more transparent and this gives me trust. not so much of a problem here where we are fitting a linear model but with more complex models very useful and the next blog post will show an example of this. 
 
-so let"s do this model justice. there are three sites and as the authors identified, there are quite different processes going on at these sites given the level at which we are describing the data. as an aside I like thinking about things in this way, there is no difference in the fundamental physics at each site. quarks are quarks no matter where they are found on the beach. and perhaps physics based models might resolve the process down to the level that it can represent the different observed behaviours given just the profile information and hydrodynamic conditions (though I"ve been skeptical of this in the past based on the models I"ve worked with). but definitely at the coarse grain level we are describing the processes at with our simple linear model, we expect the parameter fits to be different at each site due to the different responses we observe to the same offshore storm.
+Instead, let's do this model justice and return to fitting the way the authors intended, just Bayesian. there are three sites and as the authors identified, there are quite different processes going on at these sites given the level at which we are describing the data. as an aside I like thinking about things in this way, there is no difference in the fundamental physics at each site. quarks are quarks no matter where they are found on the beach. and perhaps physics based models might resolve the process down to the level that it can represent the different observed behaviours given just the profile information and hydrodynamic conditions (though I"ve been skeptical of this in the past based on the models I"ve worked with). but definitely at the coarse grain level we are describing the processes at with our simple linear model, we expect the parameter fits to be different at each site due to the different responses we observe to the same offshore storm.
 
 so we will give each site it"s own parameters which can be fit by the model. luckily we made a nice long table before and that will make it very easy for us to feed in the site parameter another category. if we specify to the model it needs three parameters for each beta, we can use the correct one of those betas for each data point depending on its site. so it model function now becomes. 
 
 ```{python}
 mod_factors = bmb.Model(
     "dW ~ 0 + location + Eocum:location + Wpre:location + Dpo:location + Tpeak:location + WLres:location", # <1>
-    df, # <2>
-    family = "gaussian" # <3>
+    df,
+    family = "gaussian"
 )
 ```
 
+1. We are now specifying each variable to have one parameter per location with the `:location` syntax. If you don't believe me, look below to the forest plots and beg forgiveness for your doubt.
+
 ```{python}
+#| include: false
 fit_factors_raw = mod_factors.fit(
     draws = 2000,
     idata_kwargs=dict(log_likelihood = True)
 )
+# add the predictions
+mod_factors.predict(fit_factors_raw, kind = "response")
 ```
 
 ```{python}
@@ -563,9 +588,6 @@ for var in ["Dpo:location", "Eocum:location", "Tpeak:location", "WLres:location"
     fit_factors.posterior[var] = fit_factors.posterior[var].rename({var.split(":")[0]+":location_dim": "location"})
 
     fit_factors.posterior = fit_factors.posterior.rename({var: var.split(":")[0]})
-
-# add the predictions
-mod_factors.predict(fit_factors_raw, kind = "response")
 ```
 
 And now we can look at our beautiful posterior distributions.
@@ -646,6 +668,7 @@ az.plot_forest(
 )
 ```
 
+We can compare the models (aiming for a higher elpd_loo value) using `az.compare` and see that each step we took improved the model.
 
 ```{python}
 # Compare loo for the three models
@@ -657,3 +680,8 @@ az.compare(
     }
 )
 ```
+
+
+# Finally lets precict with uncertainty
+
+
