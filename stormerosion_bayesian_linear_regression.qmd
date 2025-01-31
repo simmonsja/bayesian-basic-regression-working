@@ -108,6 +108,10 @@ id_vars = ["Onset","Eocum","WLres","Tpeak","Dpo"] # our covariates and Onset for
 pre_vars = ["Wpre{}".format(_[2:]) for _ in cases]
 ```
 
+make this an expander section closed by default.
+
+alright you sick puppy, welcome to the data wrangling. 
+
 We are going to make a little format adjustment just to make filtering easier, there are three separate locations along which shoreline change was measured at Narrabeen (named here as exposed, partially and sheltered). These are provided as columns and we will rework the dataframe to have only a single target variable (`dW`) and convert locations into a category.
 
 ```{python}
