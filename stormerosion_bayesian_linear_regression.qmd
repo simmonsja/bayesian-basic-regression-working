@@ -61,27 +61,22 @@ os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4"
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score, root_mean_squared_error
 
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-
-# NumPyro for proabilistic programming
-import arviz as az
-from jax import random
-import jax
-import jax.numpy as jnp
+ # NumPyro for log likelihood example
 import numpyro
-from numpyro.diagnostics import hpdi
 import numpyro.distributions as dist
-from numpyro.infer import MCMC, NUTS
-from numpyro.infer import Predictive
 
+import arviz as az 
+import xarray as xr
+import bambi as bmb
 
 from functions.plotting import plot_scatter_predictions
 from functions.utils import rescale_target, calculate_r2_rmse
+
+np.random.seed(2319)
 ```
 
 We load the data directly from the authors" github repo (thanks again!). I"m going to walk you through a bit of the data wrangling. I often find it illuminating to see the ways people transform data to get it "analysis ready", but is you wish to skip to the juicier bits below, be my guest.
@@ -201,33 +196,33 @@ coefficients = {
     }
 }
 
-# coeffs given by the fit in the github repo
-coefficients = {
-    "exposed": {
-        "intercept": 0.100764,
-        "Eocum": 0.297814,
-        "Wpre": 0.224563,
-        "Dpo": -0.111426,
-        "Tpeak": 0.150129,
-        "WLres": 0.163962
-    },
-    "partially": {
-        "intercept": 0.122073,
-        "Eocum": 0.595315,
-        "Wpre": 0.272799,
-        "Dpo": -0.137715,
-        "Tpeak": 0.11471,
-        "WLres": -0.036616
-    },
-    "sheltered": {
-        "intercept": 0.299397,
-        "Eocum": 0.39053,
-        "Wpre": 0.139078,
-        "Dpo": -0.184629,
-        "Tpeak": -0.019893,
-        "WLres": -0.004457
-    }
-}
+# # coeffs given by the fit in the github repo
+# coefficients = {
+#     "exposed": {
+#         "intercept": 0.100764,
+#         "Eocum": 0.297814,
+#         "Wpre": 0.224563,
+#         "Dpo": -0.111426,
+#         "Tpeak": 0.150129,
+#         "WLres": 0.163962
+#     },
+#     "partially": {
+#         "intercept": 0.122073,
+#         "Eocum": 0.595315,
+#         "Wpre": 0.272799,
+#         "Dpo": -0.137715,
+#         "Tpeak": 0.11471,
+#         "WLres": -0.036616
+#     },
+#     "sheltered": {
+#         "intercept": 0.299397,
+#         "Eocum": 0.39053,
+#         "Wpre": 0.139078,
+#         "Dpo": -0.184629,
+#         "Tpeak": -0.019893,
+#         "WLres": -0.004457
+#     }
+# }
 
 # apply to df based on the location column
 # Function to calculate regression output
@@ -241,10 +236,9 @@ def calculate_regression_output(this_row):
             coeffs["WLres"] * this_row["WLres"])
 
 # apply the function to the dataframe
-df["dW_pred"] = df.apply(calculate_regression_output, axis=1)
+df["dW_pred"] = df.apply(calculate_regression_output, axis=10)
 
 ```
-
 
 We have a model that predicts the change in shoreline ($\Delta W$) from the additive combination of our five variables (along with an intecept term $\beta_0$). 
 
@@ -296,17 +290,6 @@ We call the description of probable values for our parameters the posterior dist
 The likelihood is a measure of how likely the data are given the model and a set of parameter values. The better fit that a set of parameter values gives, the more we should believe that those values are plausible. Notice the little flip we did there, the Bayes rule helps us to navigate from the likelihood of the data given the parameters to the posterior distribtuion for the paramaters given the data (please see further reading at the end of this section for a more comprehensive introduction to Bayes). Luckily for us, our assumptions about the form of the model and the data generating process that we specified above give rise to a likelihood. By using a Probabilistic Programming Language (PPL) like NumPyro to specify our model, we get it without breaking a sweat.
 
 Let"s have a quick look at an example below. I am going to generate some synthetic data below to relate `x` to `y` with a simple linear relationship plus guassian noise.
-
-```{python}
-#| include: false
- 
-import numpy as np
-import numpyro
-import numpyro.distributions as dist
-import matplotlib.pyplot as plt
-import seaborn as sns
-np.random.seed(0)
-```
 
 ```{python}
 # make dummy data y = 0.1 x + 0.2 + N(0, 0.1)
@@ -363,8 +346,8 @@ fig, ax = plt.subplots(figsize=(5,3.5))
 ax.scatter(x, y, color="black", s=10)
 
 # Get the min and max log likelihood values
-vmin = loglik["y_out"].mean(axis=1).min()
-vmax = loglik["y_out"].mean(axis=1).max()
+vmin = loglik["y_out"].mean(axis=10).min()
+vmax = loglik["y_out"].mean(axis=10).max()
 
 for i in range(len(loglik["y_out"])):
     # and weight the width of the line by the log likelihood
@@ -405,13 +388,6 @@ The blood of the CPU will keep you alive, even if you"re an inch from death, but
 
 Now what we maybe have a little bit of intuition about how we get the elusive posterior distribution, let's turn back to our original example. We're going to look at how to mix the ingredients ready for sampling using the Bambi package. Bambi relies on the PyMC package as a PPL to construct the model and sample from the posterior distribution.
 
-```{python}
-#| include: false
-import xarray as xr
-import arviz as az
-import bambi as bmb
-```
-
 For Bambi to work its magic, we need to supply it with a structure for the model that that:
 
 - describes the parameters in our model and specifies prior distributions for each
@@ -423,18 +399,19 @@ mod_smoothie = bmb.Model(
         "dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres", # <1>
         df, 
         priors = {
-            "Intercept": bmb.Prior("Normal", mu=0, sigma=1),
-            "Eocum": bmb.Prior("Normal", mu=0, sigma=1),
-            "Wpre": bmb.Prior("Normal", mu=0, sigma=1),
-            "Dpo": bmb.Prior("Normal", mu=0, sigma=1),
-            "Tpeak": bmb.Prior("Normal", mu=0, sigma=1),
-            "WLres": bmb.Prior("Normal", mu=0, sigma=1),
-            "sigma": bmb.Prior("HalfNormal", sigma=1)
+            "Intercept": bmb.Prior("Normal", mu=0, sigma=10),
+            "Eocum": bmb.Prior("Normal", mu=0, sigma=10),
+            "Wpre": bmb.Prior("Normal", mu=0, sigma=10),
+            "Dpo": bmb.Prior("Normal", mu=0, sigma=10),
+            "Tpeak": bmb.Prior("Normal", mu=0, sigma=10),
+            "WLres": bmb.Prior("Normal", mu=0, sigma=10),
+            "sigma": bmb.Prior("HalfNormal", sigma=10)
         }, # <2>
         family = "gaussian" # <3>
     )
 fit_smoothie = mod_smoothie.fit(
-    draws = 2000
+    draws = 2000,
+    idata_kwargs=dict(log_likelihood = True)
 )
 # and make predcictions (added to fit_smoothie)
 mod_smoothie.predict(fit_smoothie, kind = "response")
@@ -455,7 +432,7 @@ And now we can look at our beautiful posterior distributions.
 ```{python}
 ax1 = az.plot_forest(
     fit_smoothie,
-    var_names=["~sigma", "~Intercept"],
+    var_names=["~sigma", "~Intercept", "~mu"],
     combined = True,
     hdi_prob = 0.89,
     figsize = (5, 6)
@@ -497,23 +474,24 @@ plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_pred",
 
 
 ```{python}
-# fit the smoothie model
+# fit the location smoothie model
 mod_int_smoothie = bmb.Model(
         "dW ~ 0 + location + Eocum + Wpre + Dpo + Tpeak + WLres", # <1>
         df, 
         priors = {
-            "location": bmb.Prior("Normal", mu=0, sigma=1),
-            "Eocum": bmb.Prior("Normal", mu=0, sigma=1),
-            "Wpre": bmb.Prior("Normal", mu=0, sigma=1),
-            "Dpo": bmb.Prior("Normal", mu=0, sigma=1),
-            "Tpeak": bmb.Prior("Normal", mu=0, sigma=1),
-            "WLres": bmb.Prior("Normal", mu=0, sigma=1),
-            "sigma": bmb.Prior("HalfNormal", sigma=1)
+            "location": bmb.Prior("Normal", mu=0, sigma=10),
+            "Eocum": bmb.Prior("Normal", mu=0, sigma=10),
+            "Wpre": bmb.Prior("Normal", mu=0, sigma=10),
+            "Dpo": bmb.Prior("Normal", mu=0, sigma=10),
+            "Tpeak": bmb.Prior("Normal", mu=0, sigma=10),
+            "WLres": bmb.Prior("Normal", mu=0, sigma=10),
+            "sigma": bmb.Prior("HalfNormal", sigma=10)
         }, # <2>
         family = "gaussian" # <3>
     )
 fit_int_smoothie = mod_int_smoothie.fit(
-    draws = 2000
+    draws = 2000,
+    idata_kwargs=dict(log_likelihood = True)
 )
 # and make predcictions (added to fit_smoothie)
 mod_int_smoothie.predict(fit_int_smoothie, kind = "response")
@@ -564,7 +542,8 @@ mod_factors = bmb.Model(
 
 ```{python}
 fit_factors_raw = mod_factors.fit(
-    draws = 2000
+    draws = 2000,
+    idata_kwargs=dict(log_likelihood = True)
 )
 ```
 
@@ -585,6 +564,8 @@ for var in ["Dpo:location", "Eocum:location", "Tpeak:location", "WLres:location"
 
     fit_factors.posterior = fit_factors.posterior.rename({var: var.split(":")[0]})
 
+# add the predictions
+mod_factors.predict(fit_factors_raw, kind = "response")
 ```
 
 And now we can look at our beautiful posterior distributions.
@@ -592,7 +573,7 @@ And now we can look at our beautiful posterior distributions.
 ```{python}
 az.plot_forest(
     [fit_factors, fit_smoothie],
-    var_names=["~sigma"],
+    var_names=["~sigma", "~mu"],
     combined = True,
     hdi_prob = 0.89,
     figsize = (5, 8)
@@ -609,29 +590,70 @@ but bayesy you ain't seen nothing yet. the real power of Bayes comes from the ab
 
 ```{python}
 #| include: false
+run_check = False
 
-# A check on the assumptions of shared sigma - factors vs indiv fit 
-fit = []
-for location in df["location"].unique():
-    # subset df to be only location
-    df_sub = df.loc[df["location"] == location]
-    mod = bmb.Model(
-        "dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres",
-        df_sub,
-        family = "gaussian"
+if run_check:
+    # A check on the assumptions of shared sigma - factors vs indiv fit 
+    fit = []
+    for location in df["location"].unique():
+        # subset df to be only location
+        df_sub = df.loc[df["location"] == location]
+        mod = bmb.Model(
+            "dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres",
+            df_sub,
+            family = "gaussian"
+        )
+        fit_raw = mod.fit(
+            draws = 2000
+        ).assign_coords({"location": location})
+        fit.append(fit_raw.posterior)
+
+    fit = xr.concat([_ for _ in fit], dim = "location")
+
+    az.plot_forest(
+        [fit, fit_factors, fit_smoothie],
+        var_names=["~sigma", "~mu"],
+        combined = True,
+        hdi_prob = 0.89,
+        figsize = (5, 8)
     )
-    fit_raw = mod.fit(
-        draws = 2000
-    ).assign_coords({"location": location})
-    fit.append(fit_raw.posterior)
+```
 
-fit = xr.concat([_ for _ in fit], dim = "location")
+```{python}
+# plot the mean prediction of the model against the observed data
+plot_df = pd.DataFrame({
+    "dW": df["dW"],
+    "dW_pred": fit_factors_raw.posterior["mu"].mean(dim=["chain", "draw"]).values,
+    "location": df["location"],
+    "dW_paper": df["dW_pred"]
+})
+
+plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals)
+
+# calculate the R2 for each of dW_pred and dW_paper per location
+r2_scores, rmse_scores = calculate_r2_rmse(plot_df)
+
+plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_paper", title = "Paper predictions")
+
+plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_pred", title = "Bayesian factors predictions")
 
 az.plot_forest(
-    [fit, fit_factors, fit_smoothie],
-    var_names=["~sigma"],
+    [fit_factors, fit_smoothie],
+    var_names=["~sigma", "~mu"],
     combined = True,
     hdi_prob = 0.89,
     figsize = (5, 8)
+)
+```
+
+
+```{python}
+# Compare loo for the three models
+az.compare(
+    {
+        "factors": fit_factors_raw,
+        "smoothie": fit_smoothie,
+        "int_smoothie": fit_int_smoothie
+    }
 )
 ```
