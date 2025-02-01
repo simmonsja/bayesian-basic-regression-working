@@ -6,6 +6,7 @@ format:
   html:
     toc: true
     number-sections: true
+    lightbox: true
 editor: source
 execute:
   cache: true
@@ -79,9 +80,7 @@ from functions.utils import rescale_target, calculate_r2_rmse
 np.random.seed(2319)
 ```
 
-We load the data directly from the authors" github repo (thanks again!). I"m going to walk you through a bit of the data wrangling. I often find it illuminating to see the ways people transform data to get it "analysis ready", but is you wish to skip to the juicier bits below, be my guest.
-
-As per the selected model in the paper, we will model the change in shoreline position at a given location (`dW`) with the following variables:
+We load the data directly from the authors' github repo (thanks again!). As per the selected model in the paper, we will model the change in shoreline position at a given location (`dW`) with the following variables:
 
 - `Wpre`: The shoreline position before the storm
 - `Eocum`: cumulative offshore wave energy during the storm (proportional to significant wave height squared)
@@ -99,6 +98,11 @@ raw_data = pd.read_csv(fn, index_col=0)
 display(raw_data.iloc[90:95])
 ```
 
+There's a bit of data wrangling to get us to the format you see below. If you wish to see the code I've hacked together to get us into a better format for the Bayesian modelling, then feel free to look below. But I wont subject the reader to this by default.
+
+::: {.callout-note title="Show me the code" appearance="simple" icon=false collapse=true}
+Alright you sick puppy, welcome to the data wrangling. 
+
 ```{python}
 #| output: false
 
@@ -108,15 +112,9 @@ id_vars = ["Onset","Eocum","WLres","Tpeak","Dpo"] # our covariates and Onset for
 pre_vars = ["Wpre{}".format(_[2:]) for _ in cases]
 ```
 
-make this an expander section closed by default.
-
-alright you sick puppy, welcome to the data wrangling. 
-
 We are going to make a little format adjustment just to make filtering easier, there are three separate locations along which shoreline change was measured at Narrabeen (named here as exposed, partially and sheltered). These are provided as columns and we will rework the dataframe to have only a single target variable (`dW`) and convert locations into a category.
 
 ```{python}
-#| output: false
-#| 
 # rework the dataframe
 # take only the columns we need
 df =  raw_data.copy()[id_vars+pre_vars+cases]
@@ -134,72 +132,52 @@ df["location"] = df["location"].str.replace("dW_","")
 df.sort_values(by=["Onset","location"], inplace=True)
 # and lets get rid of any NaNs
 df =  df.dropna().reset_index(drop=True)
+
+display(df.head())
 ```
+
+You should be able to see the 1999-02-05 storm correctly flowing from `raw_data` through to `df`.
+
+But we should scale our variables, as the authors did too. Of course we could skip this step but you can see that e.g., `Eocum` is orders of magnitude higher than `WLres`. Leaving the data in this state would make it really hard to interpret the coefficients of our model relative to each other for a start. Secondly, model fitting relies on gradients, and these can get whacky if your variables range over orders of magnitude. Show your model some TLC and it'll make your life easier in return ([if you dont believe me...](https://mc-stan.org/docs/stan-users-guide/efficiency-tuning.html#standardizing-predictors)).
 
 ```{python}
 #| output: false
-#| 
-# find the max and min of each column - now we need to normalise as they did which is by the location
+# find the max and min of each column - will will normalise as the authors did, by the location
 scale_max_vals = df.groupby("location").max()
 scale_min_vals = df.groupby("location").min()
 # finally, we normalise each covariate to be between 0 and 1 based on location
 for col in df.columns.drop(["Onset", "location"]):
+    # add the location specific values as temporary columns
     df["scale_max"] = df["location"].map(scale_max_vals[col])
     df["scale_min"] = df["location"].map(scale_min_vals[col])
+    # scale the variable
     df[col] = (df[col] - df["scale_min"]) / (df["scale_max"] - df["scale_min"])
+    # hide the evidence
     df = df.drop(columns=["scale_max", "scale_min"])
 ```
+:::
 
-After a bit of ugly wrangling we have our data in the format we want.
+A few moments later we have our data scaled and in the format we want:
 
 ```{python}
 #| echo: false
 display(df.head())
 ```
 
-You should be able to see the 1999-02-05 storm correctly flowing from `raw_data` through to `df`.
-
-With this shift to categories, I am also signalling our intent down the track. More on this at the end of the post. In the sections below we will focus on the basics of implementing a Bayesian regression.
+The only conceptually important part of this wrangling was the shift to categories. Instead of having seperate (e.g.,) `dW` columns for each location, we have a single target variable `dW` and a `location` column that tells us which location the data point is from (so we will now have multiple rows for the same storm event). I am signalling here our modelling intent which you will see come into play below and will set us up for more complex modelling. More on this at the end of the post.
 
 ## The model
 
-We follow the model provided in the paper:
+In the sections below we will focus on the basics of implementing a Bayesian regression. We're limited, of course, by the amount of words that I can responsibly subject you to. So for anyone wanting a comprehensive resource that introduces linear regression from the very basics - [Regression and Other Stories by Gelman, Hill and Vehtari](https://users.aalto.fi/~ave/ROS.pdf).
+
+To the model. Again, we are not thinking much about the processes here. Luckily, the authors have done the hard work and here we're just crunching numbers. So we follow the model provided in the paper:
 
 $$\Delta W = \beta_0 + \beta_1 E_{o,cum} + \beta_2 W_{pre} + \beta_3 D_{po} + \beta_4 T_{p,peak} + \beta_5 WL_{res} + \epsilon$$
 
 ```{python}
 #| include: false
-
 # Here seems as good a spot as any to calculate the output of the paper's model
-# coeffs from the paper:
-coefficients = {
-    "exposed": {
-        "intercept": 0.113,
-        "Eocum": 0.296,
-        "Wpre": 0.222,
-        "Dpo": -0.128,
-        "Tpeak": 0.228,
-        "WLres": 0.168
-    },
-    "partially": {
-        "intercept": 0.132,
-        "Eocum": 0.592,
-        "Wpre": 0.271,
-        "Dpo": -0.154,
-        "Tpeak": 0.143,
-        "WLres": -0.032
-    },
-    "sheltered": {
-        "intercept": 0.312,
-        "Eocum": 0.389,
-        "Wpre": 0.139,
-        "Dpo": -0.200,
-        "Tpeak": -0.030,
-        "WLres": 0.002
-    }
-}
-
-# coeffs given by the fit in the github repo
+# coeffs from the paper when I run the fit in the github repo
 coefficients = {
     "exposed": {
         "intercept": 0.100764,
@@ -240,14 +218,9 @@ def calculate_regression_output(this_row):
 
 # apply the function to the dataframe
 df["dW_pred"] = df.apply(calculate_regression_output, axis=1)
-
 ```
 
-We have a model that predicts the change in shoreline ($\Delta W$) from the additive combination of our five variables (along with an intecept term $\beta_0$). 
-
-We"re limited, of course, by the amount of words that I can responsibly subject you to. So for anyone wanting a comprehensive resource that introduces linear regression from the very basics (and goes far further than this blog too!) - [Regression and Other Stories by Gelman, Hill and Vehtari](https://users.aalto.fi/~ave/ROS.pdf).
-
-But onto the little red caboose languishing at the end, $\epsilon$. Sometimes it doesn"t get the attention of the cars up front, but it"s a workhorse in any gradient ascent. To help us intuit the Bayesian approach to fitting, lets simplify our model. We have our five variables, plus an intercept, which we will label collectively as $\mathbf{X}$ and coefficients for each that we must fit which we label collectively as $\mathbf{\beta}$ (see [the helpful wiki on linear regression if this notation is unfamiliar](https://en.wikipedia.org/wiki/Linear_regression#Formulation)). 
+We have a model that predicts the change in shoreline ($\Delta W$) from the additive combination of our five variables (along with an intecept term $\beta_0$). To help us intuit the Bayesian approach to fitting, lets simplify our model. We have our five variables, plus an intercept, which we will label collectively as $\mathbf{X}$ and coefficients for each that we must fit which we label collectively as $\mathbf{\beta}$ (see [the helpful wiki on linear regression if this notation is unfamiliar](https://en.wikipedia.org/wiki/Linear_regression#Formulation)). 
 
 We can condense our model to:
 
@@ -255,12 +228,12 @@ $$
 \Delta W = \mathbf{X} \mathbf{\beta} + \epsilon
 $$
 
-But what is $\epsilon$ in a Bayesian regression? One way to describe it would be that:
+But we musn't forget to discuss the little red caboose languishing at the end, our $\epsilon$. Sometimes it doesn't get the attention of the cars up front, but it's a vital part of the train in any gradient ascent. One way to describe the model above would be that:
 
 - $\mathbf{X} \mathbf{\beta}$ describes our model estimating the values of $\Delta W$
 - $\epsilon$ describes the residuals or errors of our model when considering our data
 
-In this case we are going to assume that our residuals are normally distributed with a standard deviation of $\sigma$ and centered around zero ($\mathcal{N}(0, \sigma)$). Why? This is a good start and a common assumption. Lot of stuff in nature is normal, it"s hip to be normal. Plus thinking about the alternatives too hard would lead us to the scary world of generalised linear models, and that"s not for today my friend.
+In this case we are going to assume that our residuals are normally distributed with a standard deviation of $\sigma$ and centered around zero ($\mathcal{N}(0, \sigma)$). Why? This is a good start and a common assumption. Lot of things in nature are gaussian, it's hip to be normal. Plus thinking about the alternatives too hard would lead us into the scary world of generalised linear models, and that's not for us today.
 
 Okay so:
 
@@ -276,77 +249,85 @@ $$
 
 # A brief aside on fitting models
 
-But, how the heck does this help us to fit a model? What does fitting even mean in a Bayesian framework?
+Right... how the heck does this help us to fit a model? What does fitting even mean in a Bayesian framework? Feel free to skip on to Section 4 if you're just wanting to follow the example without an unexpected journey into model fitting.
 
-In a Bayesian framework we are not aiming to learn a single set of "true" parameter values for our $\beta$"s and $\sigma$. That would be so very frequentist, and so instead we treat parameters as being probabilistic. It only makes sense to talk about how probable certain values are for the parameters and the range of values that are plausible in our model. Maybe there"s a true value to be found. Theoretically if we had the perfect model and infinite data... yeah no, that"s never going happen modelling an environment system 🥲. 
+In a Bayesian framework we are not aiming to learn a single set of "true" parameter values for our $\beta$'s and $\sigma$. That would be so very frequentist, and so instead we treat parameters as being probabilistic. It only makes sense to talk about how probable different values are for the parameters and the range of values that are plausible for our model and data. Maybe there's a single true value to be found. Theoretically if we had the perfect model and infinite data... yeah no, that's never going happen when modelling an environment system 🥲. 
 
-There"s no reason to get more into frequentist vs Bayesian approaches, I only bring it up to highlight the difference as most people default to frequentist approaches. Both are great, both are useful, both can quantify uncertainty even. But this is a post about Bayes and that"ll be that.
+There's no reason to get any more into frequentist vs Bayesian approaches, I only bring it up to highlight a key difference as most people default to frequentist approaches. Both are great, both are useful, both can quantify uncertainty even. But this is a post about Bayes and that'll be that.
 
-We call the description of probable values for our parameters the posterior distribution. To get to out posterior distribution we need three things:
+We call the description of probable values for our parameters the posterior distribution. To get to our posterior distribution we need three things:
 
 1. a model that includes a specified likelihood function
 2. prior distributions for each of our paramaters
 3. data
 
+We have 3, so let's tackle the first two.
+
 ## Likelihood
 
-The likelihood is a measure of how likely the data are given the model and a set of parameter values. The better fit that a set of parameter values gives, the more we should believe that those values are plausible. Notice the little flip we did there, the Bayes rule helps us to navigate from the likelihood of the data given the parameters to the posterior distribtuion for the paramaters given the data (please see further reading at the end of this section for a more comprehensive introduction to Bayes). Luckily for us, our assumptions about the form of the model and the data generating process that we specified above give rise to a likelihood. By using a Probabilistic Programming Language (PPL) like NumPyro to specify our model, we get it without breaking a sweat.
+The likelihood is a measure of how likely the data are given the model and a set of parameter values. The better fit to the data that a set of parameter values gives, the more we should believe that those values are plausible. Notice the little flip we did there, the Bayes rule helps us to navigate from the likelihood of the data given the parameters to the posterior distribtuion for the paramaters given the data. Luckily for us, our assumptions about the form of the model and the data generating process that we specified above give rise to a likelihood. By using a Probabilistic Programming Language (PPL) like NumPyro to specify our model, we get this without even breaking a sweat.
 
-Let"s have a quick look at an example below. I am going to generate some synthetic data below to relate `x` to `y` with a simple linear relationship plus guassian noise.
+If the above paragraph was confusing, that's okay. We're going to specify it in a code example below. I am going to generate some synthetic data that relates a variable `X` to target `y` with a simple linear relationship plus guassian noise (`np.random.randn`).
 
 ```{python}
-# make dummy data y = 0.1 x + 0.2 + N(0, 0.1)
-x = np.random.randn(100)
-y = 0.1 * x + 0.2 + 0.1 * np.random.randn(100)
+# make dummy data for X, then y = 0.1 X + 0.2 + N(0, 0.1)
+X = np.random.randn(100)
+y = 0.1 * X + 0.2 + 0.1 * np.random.randn(100)
 ```
 
-We can specify our linear regression model using a PPL (I"m just teasing this here sorry, we will learn how to do this below). Then, given some propsed values for the parameters, the model will tell us the log-likelihood for these values given the model and the data. Sweet. You can see below that linear fits closer to our $0.1 * x + 0.2$ form data have higher log-likelihoods as we would expect, they fit the data better.
+We can specify our linear regression model using a PPL. Then, given some propsed values for the parameters, NumPyro will tell us the log-likelihood for these values given the model and the data. Sweet.
+
+::: {.callout-note title="Show me the code" appearance="simple" icon=false collapse=true}
 
 ```{python}
-#| include: false
-
-# build a simple model of this in NumPyro
-def model(x, y=None):
+# build a simple model for this in NumPyro
+def model(X, y=None):
     # Define priors
-    beta_0 = numpyro.sample("beta_0", dist.Normal(0, 1))
-    beta_1 = numpyro.sample("beta_1", dist.Normal(0, 1))
-    sigma = numpyro.sample("sigma", dist.Exponential(1))
+    beta_0 = numpyro.sample("beta_0", dist.Normal(0, 1)) # <1>
+    beta_1 = numpyro.sample("beta_1", dist.Normal(0, 1)) # <1>
+    sigma = numpyro.sample("sigma", dist.Exponential(1)) # <1>
     # Define the model
-    mu = beta_0 + beta_1 * x
-    # store the model prediction before we account for the error
-    numpyro.deterministic("mu", mu)
+    mu = beta_0 + beta_1 * X # <2>
+    # store the model prediction before we account for the error # <2>
+    numpyro.deterministic("mu", mu) # <2>
     # and then finally sample so we can compare to our observations
-    numpyro.sample("y_out", dist.Normal(mu, sigma), obs=y)
+    numpyro.sample("y_out", dist.Normal(mu, sigma), obs=y)  # <3>
+```
 
+1. The first few lines define the prior distrbituions for the parameters in our model - explained in Section 3.2 below.
+
+2. We define the model as a linear regression with an intercept (`beta_0`) and a slope (`beta_1`). `mu` ($\mu$) stores part of the model we defined above i.e., $\mu = \mathbf{X}\mathbf{\beta}$.
+
+3. Finally we tell the model how we think the residuals are distributed about $\mu$. This line is a direct translation of our equation from above $y \sim \mathcal{N}(\mathbf{X} \mathbf{\beta}, \sigma)$.
+
+```{python}
+#| code-fold: true
+#| code-summary: "Log-likelihood code" 
+#| output: false
 # generate 10 possible solutions
 proposed_values = {
     "beta_0" : np.array([0.2, 0.1, 0.05, 0.19, 0.21, 0.4, 0.45, 0.25, 0.05, 0.2]),
     "beta_1" : np.array([0.1, 0.2, 0.05, 0.11, 0.09, 0, -0.1, 0.15, 0.2, 0.3]),
     "sigma" : np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
 }
-```
-
-```{python}
-#| include: false
-
+# get the log likihood
 loglik = numpyro.infer.util.log_likelihood(
     model = model, 
     posterior_samples = proposed_values,
-    x = x, 
+    X = X, 
     y = y
 )
 ```
-
-::: {.callout-note}
-For the graph below: the higher the likelihood the better (hence why you may have heard of maximum likelihood estimation).
 :::
+
+You can see below that linear fits closer to our true model form $0.1 * x + 0.2$ have higher log-likelihoods as we would expect, they fit the data better.
 
 ```{python}
 #| echo: false
 
 # plot the predicted line of each of the proposed solutions coloured by the log likelihood and the data
 fig, ax = plt.subplots(figsize=(5,3.5))
-ax.scatter(x, y, color="black", s=1)
+ax.scatter(X, y, color="black", s=1)
 
 # Get the min and max log likelihood values
 vmin = loglik["y_out"].mean(axis=1).min()
@@ -354,9 +335,9 @@ vmax = loglik["y_out"].mean(axis=1).max()
 
 for i in range(len(loglik["y_out"])):
     # and weight the width of the line by the log likelihood
-    ax.plot(x, x * proposed_values["beta_1"][i] + proposed_values["beta_0"][i], color=plt.cm.viridis((loglik["y_out"][i].mean() - vmin) / (vmax - vmin)), alpha=0.75, lw=2)
+    ax.plot(X, X * proposed_values["beta_1"][i] + proposed_values["beta_0"][i], color=plt.cm.viridis((loglik["y_out"][i].mean() - vmin) / (vmax - vmin)), alpha=0.75, lw=2)
 
-ax.set_xlabel("x", fontsize=14)
+ax.set_xlabel("X", fontsize=14)
 ax.set_ylabel("y", fontsize=14)
 ax.grid(True, which="both", linestyle="--", linewidth=0.5, color="lightgrey")
 
@@ -365,6 +346,10 @@ sm.set_array([])
 fig.colorbar(sm, ax=ax, label="log-likelihood")
 plt.show()
 ```
+
+::: {.callout-note}
+For the graph above: the higher the likelihood the better (hence why you may have heard of maximum likelihood estimation).
+:::
 
 ## Relax and let the machine do its job
 
@@ -397,24 +382,25 @@ For Bambi to work its magic, we need to supply it with a structure for the model
 - specifies the model that, given the data and the parameters, estimates the target (y)
 
 ```{python}
+#| output: false
 # fit the smoothie model
 mod_smoothie = bmb.Model(
         "dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres", # <1>
-        df, # <2
+        df, # <2>
         priors = {
-            "Intercept": bmb.Prior("Normal", mu=0, sigma=10),
-            "Eocum": bmb.Prior("Normal", mu=0, sigma=10),
-            "Wpre": bmb.Prior("Normal", mu=0, sigma=10),
-            "Dpo": bmb.Prior("Normal", mu=0, sigma=10),
-            "Tpeak": bmb.Prior("Normal", mu=0, sigma=10),
-            "WLres": bmb.Prior("Normal", mu=0, sigma=10),
-            "sigma": bmb.Prior("HalfNormal", sigma=10)
+            "Intercept": bmb.Prior("Normal", mu=0, sigma=10), # <3>
+            "Eocum": bmb.Prior("Normal", mu=0, sigma=10), # <3>
+            "Wpre": bmb.Prior("Normal", mu=0, sigma=10), # <3>
+            "Dpo": bmb.Prior("Normal", mu=0, sigma=10), # <3>
+            "Tpeak": bmb.Prior("Normal", mu=0, sigma=10), # <3>
+            "WLres": bmb.Prior("Normal", mu=0, sigma=10), # <3>
+            "sigma": bmb.Prior("HalfNormal", sigma=10) # <3>
         }, # <3>
         family = "gaussian" # <4>
     )
-fit_smoothie = mod_smoothie.fit(
-    draws = 2000,
-    idata_kwargs=dict(log_likelihood = True)
+fit_smoothie = mod_smoothie.fit( # <5>
+    draws = 2000, # <5>
+    idata_kwargs=dict(log_likelihood = True) # <5>
 ) # <5>
 # and make predcictions (added to fit_smoothie)
 mod_smoothie.predict(fit_smoothie, kind = "response") # <6>
@@ -422,7 +408,7 @@ mod_smoothie.predict(fit_smoothie, kind = "response") # <6>
 
 1. the next bit I want to focus on is the model itself, it specifies the same equation we saw above with all our beta terms and the various columns of the data. this sounds feel familiar and is the engine of our model, defining how we expect the input to be related to the output ( in this case via a simple additive linear model). 
 
-2. Models, don't they love data.
+2. Models, oh how they covet data.
 
 3. Really the specification of the prior is the only new part from what the authors did in their paper. so we start by defining a function `linear_model()` that takes in x and y. you'll notice that y is optional. Our model is always generative and will produce estimates of the target when before fitting (thanks priors). we will use this as a handy check on our priors later in the piece. 
 the final part describes our priors. let"s set them all as n(0,1). 
@@ -455,12 +441,18 @@ az.plot_trace(
     var_names = ["Intercept", "sigma"],
     figsize = (5, 5)
 )
+```
+
+
+```{python}
+#| include: false
 az.rhat(fit_smoothie)
 ```
 
 Finally, best until last - lets plot the predicitons of the model vs the data and compare to the paper to make sure we are on the right track.
 
 ```{python}
+#| echo: false
 # plot the mean prediction of the model against the observed data
 plot_df = pd.DataFrame({
     "dW": df["dW"],
@@ -518,6 +510,7 @@ mod_int_smoothie.predict(fit_int_smoothie, kind = "response")
 Lets see the differnce.
 
 ```{python}
+#| echo: false
 # plot the mean prediction of the model against the observed data
 plot_df = pd.DataFrame({
     "dW": df["dW"],
@@ -611,7 +604,7 @@ you can see below we use plate to generate one parameter per site. and we select
 let"s check our fit. nice, we have a very nicely converging model with parameters per site. 
 let"s have a look at these values. I like this information a lot, it points to some of the more interesting points. we are very unsure about whether the direction variable should be in there or not. the bounds are wide and encompass zero. infact if we fit a model without it we do almost as well. again I"m not saying this is not commonplace in frequentist approaches too, but I find this way very clear.  
 
-but bayesy you ain't seen nothing yet. the real power of Bayes comes from the ability of this workflow to scale to much much more complex models. the extra degree of freedom given by the prior, allows us to fully describe our beliefs about the data in a way that we only glimpsed in this example.
+But you ain't seen nothing yet. the real power of Bayes comes from the ability of this workflow to scale to much much more complex models. the extra degree of freedom given by the prior, allows us to fully describe our beliefs about the data in a way that we only glimpsed in this example.
 
 
 ```{python}
@@ -646,6 +639,7 @@ if run_check:
 ```
 
 ```{python}
+#| echo: false
 # plot the mean prediction of the model against the observed data
 plot_df = pd.DataFrame({
     "dW": df["dW"],
