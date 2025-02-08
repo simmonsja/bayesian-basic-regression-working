@@ -1,5 +1,5 @@
 ---
-title: "Bayesian linear regression example"
+title: "Fitting a Bayesian linear regression for storm response"
 theme: flatly
 from: markdown+emoji
 format:
@@ -12,28 +12,28 @@ execute:
   cache: true
 ---
 
-# An ode to linear regressions
+# Setup
 
-Good old fashioned, handful of parameters linear regressions are great!
+## An ode to linear regressions
 
-Don"t get me wrong I love fitting larger machine learning (ML) models and when you"re after raw predictive power there's nothing better than finally getting that  huge neural networking singing. But in so many applications where you would employ data-driven models, linear regression models (and variations thereof) can hold their own and often be better suited to the project as a whole. 
+Good old fashioned, handful of parameters, linear regressions are great!
 
-There's something very tangible about knowing all the parameters in your model. A tight knit group that you can all call friends when you push that final project deliverable out the door. As ML models get larger, at best they're are filled with acquaintances. More often you're left anxiously gazing into the black-box abyss just hoping to recognise a friendly face.
+Don't get me wrong I love fitting larger machine learning (ML) models and when you're after raw predictive power there's nothing better than finally getting that huge neural network singing. But in so many applications where you would employ data-driven models, linear regression models (and variations thereof) can hold their own in performance and often be better suited (more manageable, quicker, more interpretable) to the project as a whole. 
 
-For a while now my default method for fitting linear regressions has been Bayesian. Sure uncertainty quantification is :fire:, but really it"s the flexibility afforded by a Bayesian framework which lets you guide and extend on simple models to provide just the right level of complexity. Actually this post is really a vehicle to a future post which will dive into some of this flexibility and really show off the interesting aspects (hint: it"ll be plenty hierarchical). But we have to get on the bus somewhere, and this is the stop closest to home. 
+There's something very endearing about being able to see all the parameters in your model. A tight knit group that you can call friends when you push that final project deliverable out the door. As ML models get larger, at best they're are filled with acquaintances. More often you're left anxiously gazing into the black-box abyss just hoping to recognise a friendly face.
 
-I will say though, that you pay for all these flashy uncertainty bands et al. with a (mostly very modest) computational cost. Sometimes it can sneak up on you for more complex models, but for a lot of problems in the environmental space the time difference is small on modern compute. I've skimmed through enough articles to know attention spans are shorter than ever, or something to that effect, but surely we can spare a extra seconds to give our model a glow up.
+For a while now my default method for fitting linear regressions has been Bayesian. Sure uncertainty quantification is :fire:, but really it's the flexibility afforded by a Bayesian framework which lets you guide and extend on simple models to provide just the right level of complexity. Actually this post is a vehicle to a future post which will dive into this flexibility and show off some more interesting aspects (hint: it'll be plenty hierarchical). But we have to get on the bus somewhere, and this is the stop closest to home. Plus I hope there'll be some nice countryside out the window on the way.
 
 ## What this is and what this is not
 
 ::: {.callout-tip}
 ## IS
-A very practical implementation based introduction to Bayesian methods.
+A very practical implementation based introduction to Bayesian methods. A, hopefully, relatable hook into a deeper subject.
 :::
 
 ::: {.callout-important}
 ## IS NOT
-A comprehensive guide. I"ll try refer to other books where more details are needed.
+A comprehensive guide to the theory or practice of Bayesian methods. I'll try refer to other books where more details are needed.
 :::
 
 ## The task
@@ -43,11 +43,13 @@ We are going to use a great, openly available dataset that describes sandy beach
 Data-driven modelling of coastal storm erosion for real-time forecasting at a wave-dominated embayed beach (Ibaceta and Harley, 2024)
 https://doi.org/10.1016/j.coastaleng.2024.104596
 
-NB: This is not in any way meant to be knock on the use of a frequentist approach in the above paper. I'll show some of the differences as we go along of course, but the true power of applying Bayesian methods only comes when fitting more complex models which we will see in the next post. I use this paper as the data are available, the model has been prepared and carefully thought about, and it was an excellent (and clear/well-written) use of data-driven modelling to explore storm erosion!
+In this paper, the authors fit a really nice linear regression to model the storm response. We show here how an equivalent model could be fit with Bayesian methods to show this alternative appraoch and its concepts.
 
-Anyway I hear you, pipe down and show me some data.
+::: {.callout-note collapse="true"}
+This is not in any way meant to be knock on the use of a frequentist approach in the above paper. I'll show some of the differences as we go along of course, but the true power of applying Bayesian methods only comes when fitting more complex models which we will see in the next post. I use this paper as the data are freely available, the model is already prepared and has been carefully thought about, and it was an excellent (and clear/well-written) use of data-driven modelling to explore storm erosion!
+:::
 
-# Beginning
+Anyway I hear you, "pipe down and show me some data".
 
 ## The data
 
@@ -80,13 +82,15 @@ from functions.utils import rescale_target, calculate_r2_rmse
 np.random.seed(2319)
 ```
 
-We load the data directly from the authors' github repo (thanks again!). As per the selected model in the paper, we will model the change in shoreline position at a given location (`dW`) with the following variables:
+We load the data directly from the authors' github repo (thanks again!). As per the selected model in the paper, we will attempt to predict (XX review lang) the change in shoreline position at a given location (`dW`) with the following variables:
 
 - `Wpre`: The shoreline position before the storm
 - `Eocum`: cumulative offshore wave energy during the storm (proportional to significant wave height squared)
 - `WLres`: residual of measured water level to astronomical tide
 - `Tpeak`: peak offshore wave period during the storm
 - `Dpo`: average wave direction during the storm
+
+The raw data:
 
 ```{python}
 #| echo: false
@@ -98,7 +102,7 @@ raw_data = pd.read_csv(fn, index_col=0)
 display(raw_data.iloc[90:95])
 ```
 
-There's a bit of data wrangling to get us to the format you see below. If you wish to see the code I've hacked together to get us into a better format for the Bayesian modelling, then feel free to look below. But I wont subject the reader to this by default.
+There's a bit of data wrangling to get us to the fit-ready format you'll see below. If you wish to see the code I've hacked together to get us into a better format for the Bayesian modelling, then feel free to look below. But I wont subject the reader to this by default.
 
 ::: {.callout-note title="Show me the code" appearance="simple" icon=false collapse=true}
 Alright you sick puppy, welcome to the data wrangling. 
@@ -112,7 +116,7 @@ id_vars = ["Onset","Eocum","WLres","Tpeak","Dpo"] # our covariates and Onset for
 pre_vars = ["Wpre{}".format(_[2:]) for _ in cases]
 ```
 
-We are going to make a little format adjustment just to make filtering easier, there are three separate locations along which shoreline change was measured at Narrabeen (named here as exposed, partially and sheltered). These are provided as columns and we will rework the dataframe to have only a single target variable (`dW`) and convert locations into a category.
+We are going to make a little format adjustment just to make filtering between locations easier. in this dataset there are three separate locations at which shoreline change was measured at Narrabeen (named here as "exposed", "partially" and "sheltered"). These are provided as columns in the original data, and here we rework the dataframe to have only a single target variable (`dW`) and convert locations into a column as a categorical variable.
 
 ```{python}
 # rework the dataframe
@@ -136,9 +140,9 @@ df =  df.dropna().reset_index(drop=True)
 display(df.head())
 ```
 
-You should be able to see the 1999-02-05 storm correctly flowing from `raw_data` through to `df`.
+You should be able to see (e.g., from thhe Wpre column) the 1999-02-05 storm (row 92) correctly flowing from `raw_data` through to `df` below (rows 0 - 2, i.e., three total as there are three locations).
 
-But we should scale our variables, as the authors did too. Of course we could skip this step but you can see that e.g., `Eocum` is orders of magnitude higher than `WLres`. Leaving the data in this state would make it really hard to interpret the coefficients of our model relative to each other for a start. Secondly, model fitting relies on gradients, and these can get whacky if your variables range over orders of magnitude. Show your model some TLC and it'll make your life easier in return ([if you dont believe me...](https://mc-stan.org/docs/stan-users-guide/efficiency-tuning.html#standardizing-predictors)).
+We should take this time to scale our covariates, as the authors did too. Of course we could skip this step but you can see that e.g., `Eocum` is orders of magnitude higher than `WLres`. Leaving the data in this state would make it really hard to interpret the coefficients of our model relative to each other for a start. Secondly, model fitting relies on gradients, and these can get whacky if your variables range over orders of magnitude. Be kind. Show your model some TLC and it'll make your life easier in return ([and if you dont believe me...](https://mc-stan.org/docs/stan-users-guide/efficiency-tuning.html#standardizing-predictors)).
 
 ```{python}
 #| output: false
@@ -157,20 +161,20 @@ for col in df.columns.drop(["Onset", "location"]):
 ```
 :::
 
-A few moments later we have our data scaled and in the format we want:
+A few moments later... we have our data scaled and in the format we want:
 
 ```{python}
 #| echo: false
 display(df.head())
 ```
 
-The only conceptually important part of this wrangling was the shift to categories. Instead of having seperate (e.g.,) `dW` columns for each location, we have a single target variable `dW` and a `location` column that tells us which location the data point is from (so we will now have multiple rows for the same storm event). I am signalling here our modelling intent which you will see come into play below and will set us up for more complex modelling. More on this at the end of the post.
+The only conceptually important part of this wrangling was the shift to having the location as a categorical column. Instead of having seperate (e.g.,) `dW` columns for each location, we have a single target variable `dW` and a `location` column that tells us which location the data point is from (so we will now have multiple rows for the same storm event). I am signalling here our modelling intent which you will see come into play below and will put us in the right data frame of mind for more complex modelling.
 
 ## The model
 
 In the sections below we will focus on the basics of implementing a Bayesian regression. We're limited, of course, by the amount of words that I can responsibly subject you to. So for anyone wanting a comprehensive resource that introduces linear regression from the very basics - [Regression and Other Stories by Gelman, Hill and Vehtari](https://users.aalto.fi/~ave/ROS.pdf).
 
-To the model. Again, we are not thinking much about the processes here. Luckily, the authors have done the hard work and here we're just crunching numbers. So we follow the model provided in the paper:
+To the model. Again, we are not thinking much about coastal processes here. Luckily, the authors have done the hard work and we just get to sit back and crunch numbers 😎. So we follow the model provided in the paper:
 
 $$\Delta W = \beta_0 + \beta_1 E_{o,cum} + \beta_2 W_{pre} + \beta_3 D_{po} + \beta_4 T_{p,peak} + \beta_5 WL_{res} + \epsilon$$
 
@@ -220,7 +224,9 @@ def calculate_regression_output(this_row):
 df["dW_pred"] = df.apply(calculate_regression_output, axis=1)
 ```
 
-We have a model that predicts the change in shoreline ($\Delta W$) from the additive combination of our five variables (along with an intecept term $\beta_0$). To help us intuit the Bayesian approach to fitting, lets simplify our model. We have our five variables, plus an intercept, which we will label collectively as $\mathbf{X}$ and coefficients for each that we must fit which we label collectively as $\mathbf{\beta}$ (see [the helpful wiki on linear regression if this notation is unfamiliar](https://en.wikipedia.org/wiki/Linear_regression#Formulation)). 
+We have a model that predicts the change in shoreline ($\Delta W$) from the additive combination of our five variables (along with an intecept term $\beta_0$). 
+
+To help us intuit the Bayesian approach to fitting, lets simplify our model. We label our five variables plus intercept collectively as $\mathbf{X}$. The corresponding coefficients that we must fit for each we label collectively as $\mathbf{\beta}$ (see [the here if this notation is unfamiliar](https://en.wikipedia.org/wiki/Linear_regression#Formulation)). 
 
 We can condense our model to:
 
@@ -228,14 +234,14 @@ $$
 \Delta W = \mathbf{X} \mathbf{\beta} + \epsilon
 $$
 
-But we musn't forget to discuss the little red caboose languishing at the end, our $\epsilon$. Sometimes it doesn't get the attention of the cars up front, but it's a vital part of the train in any gradient ascent. One way to describe the model above would be that:
+But we musn't forget to discuss the little red caboose languishing at the end, $\epsilon$. Sometimes it doesn't get the attention of the cars up front, but it's a vital part of the train in any gradient ascent. One way to parse the above would be:
 
 - $\mathbf{X} \mathbf{\beta}$ describes our model estimating the values of $\Delta W$
 - $\epsilon$ describes the residuals or errors of our model when considering our data
 
-In this case we are going to assume that our residuals are normally distributed with a standard deviation of $\sigma$ and centered around zero ($\mathcal{N}(0, \sigma)$). Why? This is a good start and a common assumption. Lot of things in nature are gaussian, it's hip to be normal. Plus thinking about the alternatives too hard would lead us into the scary world of generalised linear models, and that's not for us today.
+In this case we are going to *assume* that our residuals are normally distributed with a standard deviation of $\sigma$ and centered around zero ($\mathcal{N}(0, \sigma)$). Why? This is a good start and a common assumption. Lot of things in nature are gaussian. Plus thinking about the alternatives too hard would lead us into the scary world of generalised linear models, and that's not for us today.
 
-Okay so:
+Okay so putting words into notation:
 
 $$
 \Delta W = \mathbf{X} \mathbf{\beta} + \epsilon \qquad \epsilon \sim \mathcal{N}(0, \sigma)
@@ -249,11 +255,11 @@ $$
 
 # A brief aside on fitting models
 
-Right... how the heck does this help us to fit a model? What does fitting even mean in a Bayesian framework? Feel free to skip on to Section 4 if you're just wanting to follow the example without an unexpected journey into model fitting.
+Right... how the heck does this help us to fit a model? What does fitting even mean in a Bayesian framework? Feel free to skip on to Section 3 if you're just wanting to follow the example without an unexpected journey into model fitting.
 
 In a Bayesian framework we are not aiming to learn a single set of "true" parameter values for our $\beta$'s and $\sigma$. That would be so very frequentist, and so instead we treat parameters as being probabilistic. It only makes sense to talk about how probable different values are for the parameters and the range of values that are plausible for our model and data. Maybe there's a single true value to be found. Theoretically if we had the perfect model and infinite data... yeah no, that's never going happen when modelling an environment system 🥲. 
 
-There's no reason to get any more into frequentist vs Bayesian approaches, I only bring it up to highlight a key difference as most people default to frequentist approaches. Both are great, both are useful, both can quantify uncertainty even. But this is a post about Bayes and that'll be that.
+There's no reason to get any more into frequentist vs Bayesian approaches, I only bring it up to highlight a key pivot to be made as most people default to frequentist approaches. Both are great, both are useful, both can quantify uncertainty even. But this is a post about Bayes and that'll be that.
 
 We call the description of probable values for our parameters the posterior distribution. To get to our posterior distribution we need three things:
 
@@ -261,16 +267,23 @@ We call the description of probable values for our parameters the posterior dist
 2. prior distributions for each of our paramaters
 3. data
 
-We have 3, so let's tackle the first two.
+We have #3, so let's tackle the first two.
 
 ## Likelihood
 
-The likelihood is a measure of how likely the data are given the model and a set of parameter values. The better fit to the data that a set of parameter values gives, the more we should believe that those values are plausible. Notice the little flip we did there, the Bayes rule helps us to navigate from the likelihood of the data given the parameters to the posterior distribtuion for the paramaters given the data. Luckily for us, our assumptions about the form of the model and the data generating process that we specified above give rise to a likelihood. By using a Probabilistic Programming Language (PPL) like NumPyro to specify our model, we get this without even breaking a sweat.
+The likelihood is a measure of how likely the data are given the model and a set of parameter values. The better fit to the data that a set of parameter values gives, the more we should believe that those values are plausible. Notice the little flip we did there, the Bayes rule helps us to navigate from the likelihood of the data given the parameters to what we will call our posterior distribution for the paramaters (describing probable values) given the data (XX review).
 
-If the above paragraph was confusing, that's okay. We're going to specify it in a code example below. I am going to generate some synthetic data that relates a variable `X` to target `y` with a simple linear relationship plus guassian noise (`np.random.randn`).
+Luckily for us, our assumptions about the form of the model/data generating process that we specified above give rise to a likelihood. 
+
+XX WHAT is a PPL
+
+By using a Probabilistic Programming Language (PPL) like [`NumPyro`](https://num.pyro.ai/en/latest/index.html) to specify our model, we can get this without even breaking a sweat.
+
+If the above paragraphs were confusing, that's okay. We're going to specify it in a code example below which will help. I am going to generate some synthetic data that relates a variable `X` to target `y` with a simple linear relationship plus guassian noise (`np.random.randn`).
 
 ```{python}
-# make dummy data for X, then y = 0.1 X + 0.2 + N(0, 0.1)
+# make dummy data for X, then generate y data using:
+# y = 0.1 X + 0.2 + N(0, 0.1)
 X = np.random.randn(100)
 y = 0.1 * X + 0.2 + 0.1 * np.random.randn(100)
 ```
@@ -294,9 +307,9 @@ def model(X, y=None):
     numpyro.sample("y_out", dist.Normal(mu, sigma), obs=y)  # <3>
 ```
 
-1. The first few lines define the prior distrbituions for the parameters in our model - explained in Section 3.2 below.
+1. The first few lines define the prior distrbituions for the parameters in our model - explained in Section 2.2 below.
 
-2. We define the model as a linear regression with an intercept (`beta_0`) and a slope (`beta_1`). `mu` ($\mu$) stores part of the model we defined above i.e., $\mu = \mathbf{X}\mathbf{\beta}$.
+2. We define the model as a linear regression with an intercept (`beta_0`) and a slope (`beta_1`). `mu` ($\mu$) stores the out of this model as we defined above i.e., $\mu = \mathbf{X}\mathbf{\beta}$.
 
 3. Finally we tell the model how we think the residuals are distributed about $\mu$. This line is a direct translation of our equation from above $y \sim \mathcal{N}(\mathbf{X} \mathbf{\beta}, \sigma)$.
 
@@ -320,7 +333,7 @@ loglik = numpyro.infer.util.log_likelihood(
 ```
 :::
 
-You can see below that linear fits closer to our true model form $0.1 * x + 0.2$ have higher log-likelihoods as we would expect, they fit the data better.
+You can see below that fits (i.e., values for our parameters) that lie closer to our true model parameters ($0.1 * x + 0.2$) have higher log-likelihoods. As we would expect right, they fit the data better. So there we have it, a method for assessing goodness of fit, we're well on our way to a posterior. And much of the hard work done for us, goodee.
 
 ```{python}
 #| echo: false
@@ -347,7 +360,7 @@ fig.colorbar(sm, ax=ax, label="log-likelihood")
 plt.show()
 ```
 
-::: {.callout-note}
+::: {.callout-note collapse="true"}
 For the graph above: the higher the likelihood the better (hence why you may have heard of maximum likelihood estimation).
 :::
 
@@ -358,6 +371,9 @@ We are going to talk more about prior distrbiutions below, but for now all we ne
 Our machine for obtaining samples to build a picture of the posterior distribution for our parameters is going to be Markov Chain Monte Carlo (MCMC). For a great introduction to MCMC see [this lecture](https://youtu.be/rZk2FqX2XnY?si=UpGAmJ3LEGXtGSz-&t=610) from Richard McElreath"s great Statistical Rethinking course.
 
 For our purposes and for the rest of this blog we are going to treat the process of obtaining the posterior distribution as a magic. Please go and read more from many better sources than I to build an understanding of MCMC. But for us, we just specify the data generating process with our model. The NumPyro sampling fairy then floats down from the clouds, pries open the chassis of my laptop and greedily feeds on the power being fed to my CPU for a period of seconds to minutes. The gorged fairy, now satiated, waves its magic wand and voilà! Samples from the posterior distribution are delivered into memory, rendered into figures, and subsequently delivered express to our eyeballs.
+
+XXXX
+I will say though, that you pay for all these flashy uncertainty bands et al. with a (mostly very modest) computational cost. Sometimes it can sneak up on you for more complex models, but for a lot of problems in the environmental space the time difference is small on modern compute. I've skimmed through enough articles to know attention spans are shorter than ever, or something to that effect, but surely we can spare a extra seconds to give our model a glow up.
 
 ::: {.callout-tip}
 ## Tip
@@ -683,6 +699,7 @@ az.compare(
 
 Finally lets use the fact that we fit with uncertainty to do prediction with said uncertainty.
 ```{python}
+#| echo: false
 # lets lazily and in an ugly fashion get our predictions
 plot_df = pd.DataFrame({
     "dW": df["dW"],
