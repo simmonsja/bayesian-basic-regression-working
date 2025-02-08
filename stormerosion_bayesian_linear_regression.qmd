@@ -700,4 +700,13 @@ plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals, target_appends
 
 plot_scatter_predictions_uncertainty(plot_df, target_append="_pred_median", title = "Bayesian factors predictions")
 
-```
+```As we discussed up top, we fit this model using an approach that embraced uncertainty at its core. We should make sure we are utilising that for prediction. Above I've been wasteful, throwing our posterior into the trash compactor to come up with a mean prediction for each point. But it doesn't have to be this way, we value the posterior and the information contained therein, let's display it below.
+
+you will see in the graph below of the top x predictions with uncertainty that we plot the mean again, but now with two extra lines representing the 89% confidence intervals. why two you ask? 
+
+- the blue line represents our parameter uncertainty, the range of predictions coming out of our model $\mu$. as you have seen above we don't quite know the value of each parameter and so we present the range of possible models fits that are plausible given the data and model structure.
+- however, as with above we expect (and fit or model with the assumption) that our actually observations are normally distributed about our model prediction ($\mu$), with some standard deviation $\sigma$. so the orange line represents the 89% confidence interval of where we expect our data points to lie, given that our model is not perfect and we have measurement noise.
+
+if you look at the code you can see the different terms I'm pulling out of the model.
+
+and there we have it, a Bayesian linear fit prediction uncertainty. If you're left with an empty feeling, "all that for some blue and papaya lines and a smug new philosophical approach to model fitting?", that's okay. I'd argue that it still much more plainly laid out the relative confidence we have in each of the terms included in our model, which can only be good for science. But I get it. this post was really about laying the foundations for Bayesian hierarchical models. you can see, when we got the model altogether with the 3 locations, we actually got done great results. there is a lot of shared information in how a beach responds to storms within a fairly narrow geographical area. hierarchical models help us leverage those commonalities, whilst respecting subtle and important differences. and doing so well help us avoid the worst of the demons that lurk in data driven modelling. 
