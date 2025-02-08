@@ -700,7 +700,9 @@ plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals, target_appends
 
 plot_scatter_predictions_uncertainty(plot_df, target_append="_pred_median", title = "Bayesian factors predictions")
 
-```As we discussed up top, we fit this model using an approach that embraced uncertainty at its core. We should make sure we are utilising that for prediction. Above I've been wasteful, throwing our posterior into the trash compactor to come up with a mean prediction for each point. But it doesn't have to be this way, we value the posterior and the information contained therein, let's display it below.
+```
+
+As we discussed up top, we fit this model using an approach that embraced uncertainty at its core. We should make sure we are utilising that for prediction. Above I've been wasteful, throwing our posterior into the trash compactor to come up with a mean prediction for each point. But it doesn't have to be this way, we value the posterior and the information contained therein, let's display it below.
 
 you will see in the graph below of the top x predictions with uncertainty that we plot the mean again, but now with two extra lines representing the 89% confidence intervals. why two you ask? 
 
