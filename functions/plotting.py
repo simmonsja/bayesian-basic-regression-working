@@ -1,13 +1,13 @@
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-def plot_scatter_predictions(data, r2_scores, rmse_scores, target_name="dW", target_append="", title=""):
+def plot_scatter_predictions(data, r2_scores, rmse_scores, target_name="dW", target_append="_pred", title=""):
     """
     Plot scatter plot of predictions.
     """
     # plot a scatter that is facetted by location
     g = sns.FacetGrid(data, col="location", col_wrap=3, height=3)
-    g.map(sns.scatterplot, target_name, f"{target_name}_pred")
+    g.map(sns.scatterplot, target_name, f"{target_name}{target_append}")
     g.set_axis_labels(f"Observed {target_name}", f"Predicted {target_name}")
     # red dashed 1:1 line
     for ax in g.axes:
@@ -31,3 +31,44 @@ def fix_forest_plots(ax):
     # set x axis gridlines as grey
     ax.grid(axis="x", color="lightgrey")
     return ax
+
+
+def plot_scatter_predictions_uncertainty(data, target_name="dW", target_append="", title="", upper = "_pred_hdi_higher", lower = "_pred_hdi_lower", hdi = 0.89):
+    """
+    Plot scatter plot of predictions.
+    """
+    # plot a scatter that is facetted by location
+    fig = plt.figure(figsize=(12, 4))
+    axes = fig.subplots(1, 3, sharey=True)
+    
+    for ax, loc in zip(axes, data["location"].unique()):
+        sub_data = data.query("location == @loc")
+        # keep only the top 10 storms
+        sub_data = sub_data[sub_data["dW"].rank() >= sub_data["dW"].rank().max() - 10]
+        ax.errorbar(
+            x = sub_data[target_name],
+            y = sub_data[f"{target_name}{target_append}"],
+            yerr=sub_data[f"{target_name}_obs_hdi_higher"] - sub_data[f"{target_name}_obs_hdi_lower"],
+            color='C1', fmt='o',
+            alpha=0.5
+        )
+        ax.errorbar(
+            x = sub_data[target_name],
+            y = sub_data[f"{target_name}{target_append}"],
+            yerr=sub_data[f"{target_name}{upper}"] - sub_data[f"{target_name}{lower}"],
+            fmt='o', color='C0',
+            linewidth=2.5,
+            alpha=0.75
+        )
+        ax.set_xlabel(f"Observed {target_name}")
+        ax.set_ylabel(f"Predicted {target_name}")
+        ax.set_title(loc.title())
+
+    # red dashed 1:1 line
+    for ax in axes:
+        ax.plot([data[target_name].min(), data[target_name].max()], [data[target_name].min(), data[target_name].max()], color="red", linestyle="--", alpha=0.5)
+
+    if title:
+        fig.suptitle(title, y=1.05)
+
+    plt.show()

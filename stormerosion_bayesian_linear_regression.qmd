@@ -16,13 +16,13 @@ execute:
 
 Good old fashioned, handful of parameters linear regressions are great!
 
-Don"t get me wrong I love fitting larger machine learning (ML) models and when you"re after raw predictive power there"s nothing better than finally getting that  huge neural networking singing. But in so many applications where you would employ data-driven models, linear regression models (and variations thereof) can hold their own and often be better suited to the project as a whole. 
+Don"t get me wrong I love fitting larger machine learning (ML) models and when you"re after raw predictive power there's nothing better than finally getting that  huge neural networking singing. But in so many applications where you would employ data-driven models, linear regression models (and variations thereof) can hold their own and often be better suited to the project as a whole. 
 
-There"s something very tangible about knowing all the parameters in your model. A tight knit group that you can all call friends when you push that final project deliverable out the door. As ML models get larger, at best they"re are filled with acquaintances. More often you"re left anxiously gazing into the black-box abyss just hoping to recognise a friendly face.
+There's something very tangible about knowing all the parameters in your model. A tight knit group that you can all call friends when you push that final project deliverable out the door. As ML models get larger, at best they're are filled with acquaintances. More often you're left anxiously gazing into the black-box abyss just hoping to recognise a friendly face.
 
 For a while now my default method for fitting linear regressions has been Bayesian. Sure uncertainty quantification is :fire:, but really it"s the flexibility afforded by a Bayesian framework which lets you guide and extend on simple models to provide just the right level of complexity. Actually this post is really a vehicle to a future post which will dive into some of this flexibility and really show off the interesting aspects (hint: it"ll be plenty hierarchical). But we have to get on the bus somewhere, and this is the stop closest to home. 
 
-I will say though, that you pay for all these flashy uncertainty bands et al. with a (mostly very modest) computational cost. Sometimes it can sneak up on you for more complex models, but for a lot of problems in the environmental space the time difference is small on modern compute. I"ve skimmed through enough articles to know attention spans are shorter than ever, or something to that effect, but surely we can spare a extra seconds to give our model a glow up.
+I will say though, that you pay for all these flashy uncertainty bands et al. with a (mostly very modest) computational cost. Sometimes it can sneak up on you for more complex models, but for a lot of problems in the environmental space the time difference is small on modern compute. I've skimmed through enough articles to know attention spans are shorter than ever, or something to that effect, but surely we can spare a extra seconds to give our model a glow up.
 
 ## What this is and what this is not
 
@@ -43,7 +43,7 @@ We are going to use a great, openly available dataset that describes sandy beach
 Data-driven modelling of coastal storm erosion for real-time forecasting at a wave-dominated embayed beach (Ibaceta and Harley, 2024)
 https://doi.org/10.1016/j.coastaleng.2024.104596
 
-NB: This is not in any way meant to be knock on the use of a frequentist approach in the above paper. I"ll show some of the differences as we go along of course, but the true power of applying Bayesian methods only comes when fitting more complex models which we will see in the next post. I use this paper as the data are available, the model has been prepared and carefully thought about, and it was an excellent (and clear/well-written) use of data-driven modelling to explore storm erosion!
+NB: This is not in any way meant to be knock on the use of a frequentist approach in the above paper. I'll show some of the differences as we go along of course, but the true power of applying Bayesian methods only comes when fitting more complex models which we will see in the next post. I use this paper as the data are available, the model has been prepared and carefully thought about, and it was an excellent (and clear/well-written) use of data-driven modelling to explore storm erosion!
 
 Anyway I hear you, pipe down and show me some data.
 
@@ -74,7 +74,7 @@ import arviz as az
 import xarray as xr
 import bambi as bmb
 
-from functions.plotting import plot_scatter_predictions, fix_forest_plots
+from functions.plotting import plot_scatter_predictions, fix_forest_plots, plot_scatter_predictions_uncertainty
 from functions.utils import rescale_target, calculate_r2_rmse
 
 np.random.seed(2319)
@@ -679,7 +679,25 @@ az.compare(
 )
 ```
 
-
 # Finally lets precict with uncertainty
 
+Finally lets use the fact that we fit with uncertainty to do prediction with said uncertainty.
+```{python}
+# lets lazily and in an ugly fashion get our predictions
+plot_df = pd.DataFrame({
+    "dW": df["dW"],
+    "dW_pred_mean": fit_factors_raw.posterior["mu"].mean(dim=["chain", "draw"]).values,
+    "dW_pred_median": fit_factors_raw.posterior["mu"].median(dim=["chain", "draw"]).values,
+    "dW_pred_hdi_lower": az.hdi(fit_factors_raw.posterior["mu"], hdi_prob=0.89)["mu"].sel(hdi="lower").values,
+    "dW_pred_hdi_higher": az.hdi(fit_factors_raw.posterior["mu"], hdi_prob=0.89)["mu"].sel(hdi="higher").values,
+    "dW_obs_hdi_lower": az.hdi(fit_factors_raw.posterior_predictive["dW"], hdi_prob=0.89)["dW"].sel(hdi="lower").values,
+    "dW_obs_hdi_higher": az.hdi(fit_factors_raw.posterior_predictive["dW"], hdi_prob=0.89)["dW"].sel(hdi="higher").values,
+    "location": df["location"],
+    "dW_paper": df["dW_pred"]
+})
 
+plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals, target_appends=["", "_paper", "_pred_mean", "_pred_median", "_pred_hdi_lower", "_pred_hdi_higher", "_obs_hdi_lower", "_obs_hdi_higher"])
+
+plot_scatter_predictions_uncertainty(plot_df, target_append="_pred_median", title = "Bayesian factors predictions")
+
+```
