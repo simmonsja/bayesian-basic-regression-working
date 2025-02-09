@@ -7,6 +7,8 @@ format:
     toc: true
     number-sections: true
     lightbox: true
+    fig-width: 8
+    fig-height: 6
 editor: source
 execute:
   cache: true
@@ -17,6 +19,7 @@ execute:
 ## An ode to linear regressions
 
 XX STAN uses error scale not std dev.
+XX How to describe mu
 
 Good old fashioned, handful of parameters, linear regressions are great!
 
@@ -70,7 +73,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
- # NumPyro for log likelihood example
+# NumPyro for log likelihood example
 import numpyro
 import numpyro.distributions as dist
 
@@ -428,13 +431,13 @@ fit_smoothie = mod_smoothie.fit( # <5>
 mod_smoothie.predict(fit_smoothie, kind = "response") # <6>
 ```
 
-1. this is the model itself. It specifies the same equation we saw above naming all of the columns of the data (from `df` that we will use), `Bambi` implictly then fits a $\beta$ term per covariate. We have defined how we expect the input to be related to the output (in this case via a simple additive linear model). 
+1. This is the model itself. It specifies the same equation we saw above naming all of the columns of the data (from `df` that we will use), `Bambi` implictly then fits a $\beta$ term per covariate. We have defined how we expect the input to be related to the output (in this case via a simple additive linear model). 
 
 2. Models, oh how they covet data.
 
 3. Really the specification of the prior is the main new part from what the authors did in their paper. Here we list each of our parameters (or the variables with corresponding $\beta$ parameters), and tell the model a space in which we expect to find the plausible values for these parameters. Here we won't think to hard about this, how about something close to we are 68% sure that our paramaeter values lie between -1 and 1, 95% sure they're between -2 and 2. Ths corresponds to a prior of $\beta \sim \mathcal{N}(0, 1)$. We have one other type of prior we used, and that is the `HalfNormal` prior for $\sigma$. $\sigma$ is a little special compared to the other parameters and that's because error scale cannot be negative. A normal distribution with negative standard deviation doesn't make sense. So in this case we use smile meditation and a half normal prior (bounded at 0) to enforce positivity.
 
-4. the next part is specifies the form of the residuals if you want to think about it that way, or the final part in the data generating process modelling the distribution of observations given the model as we saw above. This defines our likelihood again (XX check Vs the stan definition which is different I think as it includes the prior) as discussed above. 
+4. The next part is specifies the form of the residuals if you want to think about it that way, or the final part in the data generating process modelling the distribution of observations given the model as we saw above. This defines our likelihood again (XX check Vs the stan definition which is different I think as it includes the prior) as discussed above. 
 
 5. Now lets fit the model, letting the sampling fairy do its work to take 2000 samples from the posterior using MCMC
 
@@ -444,7 +447,7 @@ Oh you're so close to seeing a model fit, but following a [good Bayesian workflo
 
 ```{python}
 # plot the prior distributions themselves 
-mod_smoothie.plot_priors()
+mod_smoothie.plot_priors(figsize=(9, 8))
 # and sample from the priors to get predictions
 prior_pred = mod_smoothie.prior_predictive()
 ```
@@ -496,7 +499,7 @@ While we won't cover it here, `arviz` provides excellent diagnostics for viewing
 az.plot_trace(
     fit_smoothie,
     var_names = ["Intercept", "sigma"],
-    figsize = (8, 5)
+    figsize = (9, 5)
 )
 # convergence diagnostics - close to 1 is good
 az.rhat(fit_smoothie)
@@ -573,7 +576,7 @@ az.plot_forest(
     model_names=["Smoothie", "Location intercept"],
     combined = True,
     hdi_prob = 0.89,
-    figsize = (5, 8)
+    figsize = (5, 6)
 )
 plt.show()
 ```
@@ -620,7 +623,7 @@ mod_factors = bmb.Model(
 )
 ```
 
-1. we are now specifying each variable to have one parameter per location with the `:location` syntax. If you don't believe me, look below to the forest plots and beg forgiveness for your ever having doubted me.
+1. We are now specifying each variable to have one parameter per location with the `:location` syntax. If you don't believe me, look below to the forest plots and beg forgiveness for your ever having doubted me.
 
 ```{python}
 #| include: false
@@ -718,15 +721,6 @@ r2_scores, rmse_scores = calculate_r2_rmse(plot_df)
 plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_paper", title = "Paper predictions")
 
 plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_pred", title = "Bayesian factors predictions")
-
-az.plot_forest(
-    [fit_factors, fit_smoothie],
-    var_names=["~sigma", "~mu"],
-    combined = True,
-    hdi_prob = 0.89,
-    figsize = (5, 8)
-)
-plt.show()
 ```
 
 ::: {.callout-note title="Model comparison example" appearance="simple" icon=false collapse=true}
@@ -744,9 +738,10 @@ az.compare(
 ```
 ::: 
 
-# Finally lets precict with uncertainty
+# Predicting with uncertainty
 
-Finally lets use the fact that we fit with uncertainty to do prediction with said uncertainty.
+As we discussed up top, we fit this model using an approach that embraced uncertainty at its core. We should make sure we are utilising that for prediction. Above I've been wasteful, throwing our posterior into the trash compactor to come up with a mean prediction for each point. But it doesn't have to be this way, we value the posterior and the information contained therein, so lets summarise it and display it below.
+
 ```{python}
 #| echo: false
 # lets lazily and in an ugly fashion get our predictions
@@ -768,21 +763,18 @@ plot_scatter_predictions_uncertainty(plot_df, target_append="_pred_median", titl
 
 ```
 
-As we discussed up top, we fit this model using an approach that embraced uncertainty at its core. We should make sure we are utilising that for prediction. Above I've been wasteful, throwing our posterior into the trash compactor to come up with a mean prediction for each point. But it doesn't have to be this way, we value the posterior and the information contained therein, let's display it below.
+We have plot the top 10 largest storm events and the predictions from our model with uncertainty. The median is plot again as the dot in the middle, but now with two extra lines representing the 89% confidence intervals. Why two you ask? 
 
-you will see in the graph below of the top x predictions with uncertainty that we plot the mean again, but now with two extra lines representing the 89% confidence intervals. why two you ask? 
+- the blue line represents our parameter uncertainty, the range of predictions coming out of our model ($\mu$). As you have seen above we don't quite know the value of each parameter and so we present the range of possible model fits that are plausible given the data and model structure.
+- however, as with above we expect (and fit our model with the assumption) that our actual observations are normally distributed about our average model prediction ($\mu$), with some error scale $\sigma$. The orange line represents this and gives the 89% confidence interval of where we expect our data points to lie, given that both our model is imperfect and we have measurement noise.
 
-- the blue line represents our parameter uncertainty, the range of predictions coming out of our model $\mu$. as you have seen above we don't quite know the value of each parameter and so we present the range of possible models fits that are plausible given the data and model structure.
-- however, as with above we expect (and fit or model with the assumption) that our actually observations are normally distributed about our mean model prediction ($\mu$), with some standard deviation $\sigma$. so the orange line represents the 89% confidence interval of where we expect our data points to lie, given that our model is not perfect and we have measurement noise.
+# We did it
 
-if you look at the code you can see the different terms I'm pulling out of the model.
+And there we have it, a Bayesian linear fit prediction uncertainty. If you're left with an empty feeling, "all that for some blue and papaya lines and a smug new philosophical approach to model fitting?", that's okay. I'd argue that it by default more plainly lays out the relative confidence we have in each of the terms included in our model, which can only be helpful in scientific context. But I get it. 
 
+But you ain't seen nothing yet. The real power of Bayes comes from the ability of this workflow to scale to much, much more complex models. The extra degree of freedom given by the prior, allows us to fully describe our beliefs about the data in a way that we only glimpsed in this example.
 
-But you ain't seen nothing yet. the real power of Bayes comes from the ability of this workflow to scale to much much more complex models. the extra degree of freedom given by the prior, allows us to fully describe our beliefs about the data in a way that we only glimpsed in this example.
-
-and there we have it, a Bayesian linear fit prediction uncertainty. If you're left with an empty feeling, "all that for some blue and papaya lines and a smug new philosophical approach to model fitting?", that's okay. I'd argue that it still much more plainly laid out the relative confidence we have in each of the terms included in our model, which can only be good for science. But I get it. this post was really about laying the foundations for Bayesian hierarchical models. you can see, when we got the model altogether with the 3 locations, we actually got done great results. there is a lot of shared information in how a beach responds to storms within a fairly narrow geographical area. hierarchical models help us leverage those commonalities, whilst respecting subtle and important differences. and doing so well help us avoid the worst of the demons that lurk in data driven modelling. 
-
-
+And so this post was really about laying the foundations for Bayesian hierarchical models. You saw when we fit the model altogether with the three locations, we actually got some great results. There is a lot of shared information in how a beach responds to storms within a fairly narrow geographical area. Hierarchical models help us to leverage these commonalities, whilst respecting subtle and important differences. And in doing so these models will help us avoid the worst of the demons that lurk in data-driven modelling.
 
 # Reading list
 

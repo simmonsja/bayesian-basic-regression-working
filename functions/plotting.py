@@ -6,7 +6,7 @@ def plot_scatter_predictions(data, r2_scores, rmse_scores, target_name="dW", tar
     Plot scatter plot of predictions.
     """
     # plot a scatter that is facetted by location
-    g = sns.FacetGrid(data, col="location", col_wrap=3, height=3)
+    g = sns.FacetGrid(data, col="location", col_wrap=3, height=2.75, aspect=0.95)
     g.map(sns.scatterplot, target_name, f"{target_name}{target_append}")
     g.set_axis_labels(f"Observed {target_name}", f"Predicted {target_name}")
     # red dashed 1:1 line
@@ -33,18 +33,18 @@ def fix_forest_plots(ax):
     return ax
 
 
-def plot_scatter_predictions_uncertainty(data, target_name="dW", target_append="", title="", upper = "_pred_hdi_higher", lower = "_pred_hdi_lower", hdi = 0.89):
+def plot_scatter_predictions_uncertainty(data, target_name="dW", target_append="", title="", upper = "_pred_hdi_higher", lower = "_pred_hdi_lower", hdi = 0.89, n = 10):
     """
     Plot scatter plot of predictions.
     """
     # plot a scatter that is facetted by location
-    fig = plt.figure(figsize=(12, 4))
+    fig = plt.figure(figsize=(9, 3))
     axes = fig.subplots(1, 3, sharey=True)
     
     for ax, loc in zip(axes, data["location"].unique()):
         sub_data = data.query("location == @loc")
         # keep only the top 10 storms
-        sub_data = sub_data[sub_data["dW"].rank() >= sub_data["dW"].rank().max() - 10]
+        sub_data = sub_data[sub_data["dW"].rank() >= sub_data["dW"].rank().max() - n]
         ax.errorbar(
             x = sub_data[target_name],
             y = sub_data[f"{target_name}{target_append}"],
