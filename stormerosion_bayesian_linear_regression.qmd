@@ -16,6 +16,8 @@ execute:
 
 ## An ode to linear regressions
 
+XX STAN uses error scale not std dev.
+
 Good old fashioned, handful of parameters, linear regressions are great!
 
 Don't get me wrong I love fitting larger machine learning (ML) models and when you're after raw predictive power there's nothing better than finally getting that huge neural network singing. But in so many applications where you would employ data-driven models, linear regression models (and variations thereof) can hold their own in performance and often be better suited (more manageable, quicker, more interpretable) to the project as a whole. 
@@ -265,13 +267,18 @@ We call the description of probable values for our parameters the posterior dist
 
 1. a model that includes a specified likelihood function
 2. prior distributions for each of our paramaters
-3. data
+3. an algorithm to take samples from the posterior
+4. data
 
-We have #3, so let's tackle the first two.
+We have #4, so let's tackle the first three.
 
 ## Likelihood
 
 The likelihood is a measure of how likely the data are given the model and a set of parameter values. The better fit to the data that a set of parameter values gives, the more we should believe that those values are plausible. Notice the little flip we did there, the Bayes rule helps us to navigate from the likelihood of the data given the parameters to what we will call our posterior distribution for the paramaters (describing probable values) given the data (XX review).
+
+XXXX
+- we need to fit the params ($\mu$ or the betas that make up $\mu$, and $\sigma$) based on how well they explain the data
+"What this means, recall, is that the machine considers every possible combination of the  parameter values. With a linear model, some of the parameters now stand for the strength  of association between the mean of the outcome, µ, and the value of some other variable.  For each combination of values, the machine computes the posterior probability, which is  a measure of relative plausibility, given the model and data. So the posterior distribution  ranks the infinite possible combinations of parameter values by their logical plausibility."
 
 Luckily for us, our assumptions about the form of the model/data generating process that we specified above give rise to a likelihood. 
 
@@ -309,7 +316,7 @@ def model(X, y=None):
 
 1. The first few lines define the prior distrbituions for the parameters in our model - explained in Section 2.2 below.
 
-2. We define the model as a linear regression with an intercept (`beta_0`) and a slope (`beta_1`). `mu` ($\mu$) stores the out of this model as we defined above i.e., $\mu = \mathbf{X}\mathbf{\beta}$.
+2. We define the model as a linear regression with an intercept (`beta_0`) and a slope (`beta_1`). `mu` ($\mu$) stores the mean of this model as we defined above i.e., $\mu = \mathbf{X}\mathbf{\beta}$.
 
 3. Finally we tell the model how we think the residuals are distributed about $\mu$. This line is a direct translation of our equation from above $y \sim \mathcal{N}(\mathbf{X} \mathbf{\beta}, \sigma)$.
 
@@ -364,56 +371,55 @@ plt.show()
 For the graph above: the higher the likelihood the better (hence why you may have heard of maximum likelihood estimation).
 :::
 
+## Raising a model
+
+We are going to talk more about prior distributions below. For now all we need to know is that the model needs us to work hand in hand with it. A Bayesian approach is guiding the model, supporting it and empowering it to achieve a good fit. Infinity is an frighteningly large search space, and without some guidance we are sending our model out in the big wide world all alone. We use prior knowledge to define some reasonable space in which we expect to find plausible values for our parameters. 
+
+The aim is to give the model a nice wide field to explore but not have it wander off a numerical cliff. In environmental science its fairly easy to define what's silly. For example, can a shoreline erode 100,000 m during a single storm event? If it could we'd be in strife so we can pretty safely give very little probability to parameter values that produce such outlandish numbers. We use prior distributions to impart this belief on the model, leaving it then do its own exploration with this information, the data, and the likelihood function.
+
 ## Relax and let the machine do its job
 
-We are going to talk more about prior distrbiutions below, but for now all we need to know is that the model needs us to work with it. Infinity is an infinitely large space, and without some guidance we are sending our model out in the big wide world all alone. We use prior knowledge to define some reasonable space in which we expect to find plausible values for our parameters. The aim is to give the model a nice wide field to explore but not have it wander off a cliff. In environmental science its fairly easy to define what"s silly. For example, can a shoreline erode 100,000 m during a storm event? If it could we"d be in strife so we can pretty safely give very little probability to parameter values that produce such outlandish numbers. We use prior distributions to impart this belief on the model leaving it then explore with this information, the data, and the likelihood function.
+Our machine for obtaining samples to build a picture of the posterior distribution for our parameters is going to be Markov Chain Monte Carlo (MCMC). For a great introduction to MCMC please go explore many better sources than I, for example [this lecture](https://youtu.be/rZk2FqX2XnY?si=UpGAmJ3LEGXtGSz-&t=610) from Richard McElreath"s great Statistical Rethinking course.
 
-Our machine for obtaining samples to build a picture of the posterior distribution for our parameters is going to be Markov Chain Monte Carlo (MCMC). For a great introduction to MCMC see [this lecture](https://youtu.be/rZk2FqX2XnY?si=UpGAmJ3LEGXtGSz-&t=610) from Richard McElreath"s great Statistical Rethinking course.
+For our purposes and for the rest of this blog we are going to treat the process of obtaining the posterior distribution as a magic. We first specify the data generating process with our model. Then the python implementation of the sampling fairy floats down from the clouds, pries open the chassis of my laptop and greedily feeds on the power being fed to my CPU for a period of seconds to minutes. The gorged fairy, now satiated, waves its magic wand and voilà! Samples from the posterior distribution are delivered into memory, rendered into figures, and subsequently delivered express to our eyeballs.
 
-For our purposes and for the rest of this blog we are going to treat the process of obtaining the posterior distribution as a magic. Please go and read more from many better sources than I to build an understanding of MCMC. But for us, we just specify the data generating process with our model. The NumPyro sampling fairy then floats down from the clouds, pries open the chassis of my laptop and greedily feeds on the power being fed to my CPU for a period of seconds to minutes. The gorged fairy, now satiated, waves its magic wand and voilà! Samples from the posterior distribution are delivered into memory, rendered into figures, and subsequently delivered express to our eyeballs.
-
-XXXX
-I will say though, that you pay for all these flashy uncertainty bands et al. with a (mostly very modest) computational cost. Sometimes it can sneak up on you for more complex models, but for a lot of problems in the environmental space the time difference is small on modern compute. I've skimmed through enough articles to know attention spans are shorter than ever, or something to that effect, but surely we can spare a extra seconds to give our model a glow up.
-
-::: {.callout-tip}
+::: {.callout-tip collapse="true"}
 ## Tip
 The blood of the CPU will keep you alive, even if you're an inch from death, but at a terrible price...
 :::
 
-- we need to fit the params ($\mu$ or the betas that make up $\mu$, and $\sigma$) based on how well they explain the data
-"What this means, recall, is that the machine considers every possible combination of the  parameter values. With a linear model, some of the parameters now stand for the strength  of association between the mean of the outcome, µ, and the value of some other variable.  For each combination of values, the machine computes the posterior probability, which is  a measure of relative plausibility, given the model and data. So the posterior distribution  ranks the infinite possible combinations of parameter values by their logical plausibility."
+Of course, I should mention that we pay the flashy uncertainty bands et al. of a Bayesian fit with a (mostly very modest) computational cost. Sometimes this cost can sneak up on you for more complex models, but for a lot of problems in the environmental space the time difference is small/manageable on modern compute. I've skimmed through enough articles to know attention spans are shorter than ever, or something to that effect, but surely we can spare a extra seconds to give our model a glow up.
 
 # Back to business
 
-- Build a model of all three together
-- Build a model for each location separately
-- Compare the output
-- Hidden sanity check vs fit 3 seperately
+## A location smoothie
 
-Now what we maybe have a little bit of intuition about how we get the elusive posterior distribution, let's turn back to our original example. We're going to look at how to mix the ingredients ready for sampling using the Bambi package. Bambi relies on the PyMC package as a PPL to construct the model and sample from the posterior distribution.
+Now what we maybe have a little bit more of an intuition about how we fit the model in Bayes and get the elusive posterior distribution, let's turn back to our original example. We're going to look at how to mix the ingredients ready for sampling using the [`Bambi` package](https://bambinos.github.io/bambi/). `Bambi` relies on the `PyMC` package as the underlying PPL to construct the model and sample from the posterior distribution.
 
-For Bambi to work its magic, we need to supply it with a structure for the model that that:
+For `Bambi` to work its magic, we need to supply it with a structure for the model that that:
 
-- describes the parameters in our model and specifies prior distributions for each
+- describes the parameters in our model and specifies prior distributions for each (though `Bambi` will adopt some default priors if you're lazy)
 - specifies the model that, given the data and the parameters, estimates the target (y)
 
 ```{python}
 #| output: false
-# fit the smoothie model
+# define our model
 mod_smoothie = bmb.Model(
-        "dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres", # <1>
-        df, # <2>
-        priors = {
-            "Intercept": bmb.Prior("Normal", mu=0, sigma=10), # <3>
-            "Eocum": bmb.Prior("Normal", mu=0, sigma=10), # <3>
-            "Wpre": bmb.Prior("Normal", mu=0, sigma=10), # <3>
-            "Dpo": bmb.Prior("Normal", mu=0, sigma=10), # <3>
-            "Tpeak": bmb.Prior("Normal", mu=0, sigma=10), # <3>
-            "WLres": bmb.Prior("Normal", mu=0, sigma=10), # <3>
-            "sigma": bmb.Prior("HalfNormal", sigma=10) # <3>
+        formula = "dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres", # <1>
+        data = df, # <2>
+        priors = { # <3>
+            "Intercept": bmb.Prior("Normal", mu = 0, sigma = 1), # <3>
+            "Eocum": bmb.Prior("Normal", mu = 0, sigma = 1), # <3>
+            "Wpre": bmb.Prior("Normal", mu = 0, sigma = 1), # <3>
+            "Dpo": bmb.Prior("Normal", mu = 0, sigma = 1), # <3>
+            "Tpeak": bmb.Prior("Normal", mu = 0, sigma = 1), # <3>
+            "WLres": bmb.Prior("Normal", mu = 0, sigma = 1), # <3>
+            "sigma": bmb.Prior("HalfNormal", sigma = 2) # <3>
         }, # <3>
         family = "gaussian" # <4>
     )
+
+# tell Bambi to draw samples using MCMC
 fit_smoothie = mod_smoothie.fit( # <5>
     draws = 2000, # <5>
     idata_kwargs=dict(log_likelihood = True) # <5>
@@ -422,50 +428,82 @@ fit_smoothie = mod_smoothie.fit( # <5>
 mod_smoothie.predict(fit_smoothie, kind = "response") # <6>
 ```
 
-1. the next bit I want to focus on is the model itself, it specifies the same equation we saw above with all our beta terms and the various columns of the data. this sounds feel familiar and is the engine of our model, defining how we expect the input to be related to the output ( in this case via a simple additive linear model). 
+1. this is the model itself. It specifies the same equation we saw above naming all of the columns of the data (from `df` that we will use), `Bambi` implictly then fits a $\beta$ term per covariate. We have defined how we expect the input to be related to the output (in this case via a simple additive linear model). 
 
 2. Models, oh how they covet data.
 
-3. Really the specification of the prior is the only new part from what the authors did in their paper. so we start by defining a function `linear_model()` that takes in x and y. you'll notice that y is optional. Our model is always generative and will produce estimates of the target when before fitting (thanks priors). we will use this as a handy check on our priors later in the piece. 
-the final part describes our priors. let"s set them all as n(0,1). 
+3. Really the specification of the prior is the main new part from what the authors did in their paper. Here we list each of our parameters (or the variables with corresponding $\beta$ parameters), and tell the model a space in which we expect to find the plausible values for these parameters. Here we won't think to hard about this, how about something close to we are 68% sure that our paramaeter values lie between -1 and 1, 95% sure they're between -2 and 2. Ths corresponds to a prior of $\beta \sim \mathcal{N}(0, 1)$. We have one other type of prior we used, and that is the `HalfNormal` prior for $\sigma$. $\sigma$ is a little special compared to the other parameters and that's because error scale cannot be negative. A normal distribution with negative standard deviation doesn't make sense. So in this case we use smile meditation and a half normal prior (bounded at 0) to enforce positivity.
 
-4. the next part is specifying the form of the residuals or the distribution of observations given the model as we saw above. this defines our likelihood(XX check Vs the stan definition which is different I think as it includes the prior) as discussed above. 
+4. the next part is specifies the form of the residuals if you want to think about it that way, or the final part in the data generating process modelling the distribution of observations given the model as we saw above. This defines our likelihood again (XX check Vs the stan definition which is different I think as it includes the prior) as discussed above. 
 
-5. Now lets fit the model, taking 2000 samples from the posterior
+5. Now lets fit the model, letting the sampling fairy do its work to take 2000 samples from the posterior using MCMC
 
-6. Last of all we make predictions on the data using the model so that we can compare the fit to Figure 8 of the paper.
+6. Last of all we make predictions on the data using the model so that we can compare the fit to Figure 8 of the paper and check we haven't stuffed anything up
 
-And now we can look at our beautiful posterior distributions using the `arviz` package.
+Oh you're so close to seeing a model fit, but following a [good Bayesian workflow](https://doi.org/10.48550/arXiv.2011.01808) we're going to check our priors first. Remember we set out with the goal of merely shaving the edges off infinity to a sensible range. Lets wee how we did. Luckily `Bambi` provides a convenience function (`.plot_priors()`) for this. You can see first of all in practice how much weight we are giving various values, as we said above telling the model we are quite sure the values lie between -2 and 2.
+
+```{python}
+# plot the prior distributions themselves 
+mod_smoothie.plot_priors()
+# and sample from the priors to get predictions
+prior_pred = mod_smoothie.prior_predictive()
+```
+
+You can see the second convenience function we used in the code above, `prior_predictive()`. This is kind of cool, because of our conceptualisation of the mdoel as represeting a data generating process we can get predicitons stright off the bat using only our priors. So we can see below that for the top 10 storms, our prior belief is that the shoreline change will be less than 1000s of meters. Our model predicts a mean of around 0 and the coloured bars show the 89% confidence intervals for our predictions (more on this below). So again, not too restrictive but we've helped the sampler into a reasonable search space.
+
+```{python}
+#| echo: false
+# lets lazily and in an ugly fashion get our predictions
+plot_df = pd.DataFrame({
+    "dW": df["dW"],
+    "dW_pred_mean": prior_pred.prior["mu"].mean(dim=["chain", "draw"]).values,
+    "dW_pred_median": prior_pred.prior["mu"].median(dim=["chain", "draw"]).values,
+    "dW_pred_hdi_lower": az.hdi(prior_pred.prior["mu"], hdi_prob=0.89)["mu"].sel(hdi="lower").values,
+    "dW_pred_hdi_higher": az.hdi(prior_pred.prior["mu"], hdi_prob=0.89)["mu"].sel(hdi="higher").values,
+    "dW_obs_hdi_lower": az.hdi(prior_pred.prior_predictive["dW"], hdi_prob=0.89)["dW"].sel(hdi="lower").values,
+    "dW_obs_hdi_higher": az.hdi(prior_pred.prior_predictive["dW"], hdi_prob=0.89)["dW"].sel(hdi="higher").values,
+    "location": df["location"],
+    "dW_paper": df["dW_pred"]
+})
+
+plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals, target_appends=["", "_paper", "_pred_mean", "_pred_median", "_pred_hdi_lower", "_pred_hdi_higher", "_obs_hdi_lower", "_obs_hdi_higher"])
+
+plot_scatter_predictions_uncertainty(plot_df, target_append="_pred_median", title = "Prior predictive check")
+```
+
+And now we come to our beautiful posterior distributions which we can examine using the `arviz` package.
 
 ```{python}
 ax1 = az.plot_forest(
     fit_smoothie,
-    var_names=["~sigma", "~Intercept", "~mu"],
+    var_names=["~sigma", "~mu"],
     combined = True,
     hdi_prob = 0.89,
-    figsize = (5, 6)
+    figsize = (5, 4)
 )
 fix_forest_plots(ax1[0])
 plt.show()
 ```
 
-You can see how sampling went via the trace
+Okay we have some $\beta$s now. You can read the paper if you want the indepth analysis, but broadly for example for this model we see shoreline change is most strongly associated with $E_{o,cum}$, with higher offshore wave energy producing more erosion on average. We can see that we are quite uncertain as to the effect of $WL_{res}$ with the confidence intervals straddling zero (note: for this model).
+
+While we won't cover it here, `arviz` provides excellent diagnostics for viewing the sampling traces and checking for convergence. This can be really useful if things are going wrong with your model, Bayes will typically be quite transparent when you've messed up. While this can sometime lead to hours/days of hair pulling trying to get complex models working, I think that a tendency not to silently fail is a real strength. Good friends have the courage to tell you when you've made a mistake.
+
+::: {.callout-note title="Show me example code" appearance="simple" icon=false collapse=true}
 
 ```{python}
+# plot the trace to see how sampling progressed 
 az.plot_trace(
     fit_smoothie,
     var_names = ["Intercept", "sigma"],
-    figsize = (5, 5)
+    figsize = (8, 5)
 )
-```
-
-
-```{python}
-#| include: false
+# convergence diagnostics - close to 1 is good
 az.rhat(fit_smoothie)
 ```
+:::
 
-Finally, best until last - lets plot the predicitons of the model vs the data and compare to the paper to make sure we are on the right track.
+Finally, saving the best until last - lets plot the predicitons of the model vs the data and compare to the paper to make sure we are on the right track.
 
 ```{python}
 #| echo: false
@@ -487,43 +525,60 @@ plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_paper"
 plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_pred", title = "Bayesian predictions")
 ```
 
-Looking good, particularly for the partially sheltered location. But we are not matching the paper predictions and the keen eyed reader will understand why. We fit the model with no reference to the different locations. But, our data have heterogeneity - different responses to the same storm event at different locations. What we've fit is one parameter to rule them all (per variable).
+Looking good, particularly for the partially sheltered location. But we are not matching the paper predictions and the keen eyed reader will understand why. We fit the model with no reference to the different locations. Our data have heterogeneity - different responses to the same storm event at different locations. What we've fit is one parameter to rule them all (per variable).
 
-But don't worry, I've got your back dog. We set the data up at the start to make it really easy to build model complexity for this (whilst keeping the ability to extend into hierarchical models later on - more on this later).
+But don't worry I've got you, dawg. We set the data up at the start to make it really easy to build model complexity for just this scenario (whilst keeping the ability to extend into hierarchical models later on).
 
-## A little more complexity
+## A dash more complexity
 
-In the first instance, we could consider that the three locations respond in the same way, but have a different mean value. For example, that $E_{o,cum}$ is always going to be a large, positively correlated driver of shoreline change, but that the overall average shoreline change for an average storm would be different when looking at a part of the beach that is sheltered/partially sheltered/exposed.
+As a next step, we could consider that the three locations respond in the same way to storms, but have a different average response. For example, we think that $E_{o,cum}$ is always going to be a large driver of shoreline change, with the same sign correlation (positive or negative) at each location. But that our predicted shoreline change for an average storm would be different when looking at a part of the beach that is sheltered/partially sheltered/exposed.
 
-Okay so lets add a group level intercept, i.e., a different intercept for each of our three locations.
+This we can call a group level intercept, i.e., a different intercept for each of our three locations which form the different groups in our dataset.
 
 ```{python}
+#| output: false
 # fit the location smoothie model
 mod_int_smoothie = bmb.Model(
         "dW ~ 0 + location + Eocum + Wpre + Dpo + Tpeak + WLres", # <1>
         df, 
         priors = {
-            "location": bmb.Prior("Normal", mu=0, sigma=10),
-            "Eocum": bmb.Prior("Normal", mu=0, sigma=10),
-            "Wpre": bmb.Prior("Normal", mu=0, sigma=10),
-            "Dpo": bmb.Prior("Normal", mu=0, sigma=10),
-            "Tpeak": bmb.Prior("Normal", mu=0, sigma=10),
-            "WLres": bmb.Prior("Normal", mu=0, sigma=10),
+            "location": bmb.Prior("Normal", mu = 0, sigma = 1),
+            "Eocum": bmb.Prior("Normal", mu = 0, sigma = 1),
+            "Wpre": bmb.Prior("Normal", mu = 0, sigma = 1),
+            "Dpo": bmb.Prior("Normal", mu = 0, sigma = 1),
+            "Tpeak": bmb.Prior("Normal", mu = 0, sigma = 1),
+            "WLres": bmb.Prior("Normal", mu = 0, sigma = 1),
             "sigma": bmb.Prior("HalfNormal", sigma=10)
         },
         family = "gaussian"
     )
+# sampling fairy do your thing
 fit_int_smoothie = mod_int_smoothie.fit(
     draws = 2000,
     idata_kwargs=dict(log_likelihood = True)
 )
-# and make predcictions (added to fit_smoothie)
+# and make predcictions (added to fit_int_smoothie)
 mod_int_smoothie.predict(fit_int_smoothie, kind = "response")
 ```
 
-1. Note that we have updated the model now to have location (a factor) as a variable. This will create one intercept per location. We also add `0 +` to indicate to the model that we don't want an overall intercept term. This would be unidentfiable as this could just as well be abosrbed into the location intercepts.
+1. Note that we have updated the model now to have `location` (a factor) as a variable. This will create one intercept per location. We also add `0 +` to indicate to the model that we don't want an overall intercept term. This would be unidentfiable as it could equally have a value or be abosrbed into the location intercepts.
 
-Lets see the differnce.
+Lets see the difference to our old "smoothie" model where we simply blended the locations together.
+
+```{python}
+#| echo: false
+az.plot_forest(
+    [fit_smoothie, fit_int_smoothie],
+    var_names=["~sigma", "~mu"],
+    model_names=["Smoothie", "Location intercept"],
+    combined = True,
+    hdi_prob = 0.89,
+    figsize = (5, 8)
+)
+plt.show()
+```
+
+Hey! Nice, you can see from the forest plot that the estimates for each parameter have barely changed, and that we now have those group level intercepts. 
 
 ```{python}
 #| echo: false
@@ -532,7 +587,7 @@ plot_df = pd.DataFrame({
     "dW": df["dW"],
     "dW_pred": fit_int_smoothie.posterior["mu"].mean(dim=["chain", "draw"]).values,
     "location": df["location"],
-    "dW_paper": df["dW_pred"]
+    "dW_paper": fit_smoothie.posterior["mu"].mean(dim=["chain", "draw"]).values
 })
 
 plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals)
@@ -540,30 +595,22 @@ plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals)
 # calculate the R2 for each of dW_pred and dW_paper per location
 r2_scores, rmse_scores = calculate_r2_rmse(plot_df)
 
-plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_paper", title = "Paper predictions")
+plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_paper", title = "Bayesian smoothie predictions")
 
 plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_pred", title = "Bayesian intercept predictions")
-
-az.plot_forest(
-    [fit_smoothie, fit_int_smoothie],
-    var_names=["~sigma", "~mu"],
-    combined = True,
-    hdi_prob = 0.89,
-    figsize = (5, 8)
-)
 ```
 
-Hey! Nice, you can see from the forest plot that the estimates for each parameter barely changed, but we now have those group level intercepts and we're lifting our performance a fair bit at the exposed location and a little at the sheltered location.
-
-This is nothing to scoff at, we explain a lot of the variability with common regression terms at all locations and a group level intercept. A nice model, and really not wholly unexpected. Beaches erode during storms, to varying degrees depending on the location, but we can expect that the physical drivers of shoreline change have similar effects along a single embayed beach such as this.
+We've lifted our performance a fair bit at the exposed location and a little at the sheltered location. This is nothing to scoff at, we explain a lot of the variability with common regression terms at all locations and a group level intercept. It's a nice model, and really this results is not unexpected. Beaches erode during storms, to varying degrees depending on the location, but we can expect that the physical drivers of shoreline change have similar effects along a single embayed beach such as this.
 
 Just like that we have stumbled into the the beginnings of a hierarchical model here, by a loose definition. Some parameters share information from the various groupings in the data and some are found seperately per group. We can get a little bit smarter about how we do this, in time...
 
-somethings going on here, we have multiple regions of the parameter space showing up as important and our model won"t converge. I'm afraid dear reader I've lead you deliberately down the wrong path to make a point. recall above that we are modelling data from 3 locations, each with different characteristics and likely different relationships between covariates and targets. it"s an easy fix to be sure, but I think it shows nicely how transparent a Bayesian model is. because you"re taking many samples from the posterior and visualising the spread, you can identify in a nice way the quirks of your model and data. yes we have taken a bit more time to set it up but at least for me I find the modelling process overall a lot more transparent and this gives me trust. not so much of a problem here where we are fitting a linear model but with more complex models very useful and the next blog post will show an example of this. 
+Instead, let's do this model justice and return to fitting the way the authors intended, just Bayesian. There are three locations and, as the authors identified, there are small but important differences in the response behaviours at these locations. 
 
-Instead, let's do this model justice and return to fitting the way the authors intended, just Bayesian. there are three sites and as the authors identified, there are quite different processes going on at these sites given the level at which we are describing the data. as an aside I like thinking about things in this way, there is no difference in the fundamental physics at each site. quarks are quarks no matter where they are found on the beach. and perhaps physics based models might resolve the process down to the level that it can represent the different observed behaviours given just the profile information and hydrodynamic conditions (though I"ve been skeptical of this in the past based on the models I"ve worked with). but definitely at the coarse grain level we are describing the processes at with our simple linear model, we expect the parameter fits to be different at each site due to the different responses we observe to the same offshore storm.
+::: {.callout-note title="Coarse sand graining" appearance="simple" icon=false collapse=true}
+At least this is true at the level at which we are describing our processes. There is no difference in the fundamental physics at each location. Quarks be quarks and do quark stuff no matter where they are found on the beach. And perhaps physics based models might resolve the processes down to the level that it can represent the different observed behaviours without resorting to tuning parameter values at each (though IMHO this has been way too hard to achieve with any of these sorts of models that I've worked with). But definitely at the coarse grained level we are describing the processes at with our simple linear model, we expect the parameter fits to be different at each location which will have different responses to the same offshore storm.
+:::
 
-so we will give each site it"s own parameters which can be fit by the model. luckily we made a nice long table before and that will make it very easy for us to feed in the site parameter another category. if we specify to the model it needs three parameters for each beta, we can use the correct one of those betas for each data point depending on its site. so it model function now becomes. 
+And so we bestow upon each location it's own $\beta$ parameters for each covariate which can be fit by the model. Luckily our data are in a format that will make this very easy as we started to do above. If we specify to the model it needs three parameters for each $\beta$, we can use the corresponding $\beta$s for each data point depending on its location. We tell this to `Bambi` with the following formula:
 
 ```{python}
 mod_factors = bmb.Model(
@@ -573,7 +620,7 @@ mod_factors = bmb.Model(
 )
 ```
 
-1. We are now specifying each variable to have one parameter per location with the `:location` syntax. If you don't believe me, look below to the forest plots and beg forgiveness for your doubt.
+1. we are now specifying each variable to have one parameter per location with the `:location` syntax. If you don't believe me, look below to the forest plots and beg forgiveness for your ever having doubted me.
 
 ```{python}
 #| include: false
@@ -603,25 +650,22 @@ for var in ["Dpo:location", "Eocum:location", "Tpeak:location", "WLres:location"
     fit_factors.posterior = fit_factors.posterior.rename({var: var.split(":")[0]})
 ```
 
-And now we can look at our beautiful posterior distributions.
+Lets look at our beautiful posterior distributions.
 
 ```{python}
+#| echo: false
 az.plot_forest(
     [fit_factors, fit_smoothie],
     var_names=["~sigma", "~mu"],
+    model_names=["Per location", "Smoothie"],
     combined = True,
     hdi_prob = 0.89,
     figsize = (5, 8)
 )
+plt.show()
 ```
 
-you can see below we use plate to generate one parameter per site. and we selected which parameter applies to which data point depending on the site it belongs to given by the site id in cat. (xx just name it site id). 
-
-let"s check our fit. nice, we have a very nicely converging model with parameters per site. 
-let"s have a look at these values. I like this information a lot, it points to some of the more interesting points. we are very unsure about whether the direction variable should be in there or not. the bounds are wide and encompass zero. infact if we fit a model without it we do almost as well. again I"m not saying this is not commonplace in frequentist approaches too, but I find this way very clear.  
-
-But you ain't seen nothing yet. the real power of Bayes comes from the ability of this workflow to scale to much much more complex models. the extra degree of freedom given by the prior, allows us to fully describe our beliefs about the data in a way that we only glimpsed in this example.
-
+I really like these plots, we see how the locations differ from each other in small but important ways. We can see locations at which we are more certain/uncertain of the effect of each covariate. We also see how these estimates pool together into a single $\beta$ for our "smoothie" model.
 
 ```{python}
 #| include: false
@@ -654,6 +698,8 @@ if run_check:
     )
 ```
 
+Once more we plot the predictions and compare back to the paper to check that we recovered similar goodness of fit. 
+
 ```{python}
 #| echo: false
 # plot the mean prediction of the model against the observed data
@@ -680,8 +726,10 @@ az.plot_forest(
     hdi_prob = 0.89,
     figsize = (5, 8)
 )
+plt.show()
 ```
 
+::: {.callout-note title="Model comparison example" appearance="simple" icon=false collapse=true}
 We can compare the models (aiming for a higher elpd_loo value) using `az.compare` and see that each step we took improved the model.
 
 ```{python}
@@ -694,6 +742,7 @@ az.compare(
     }
 )
 ```
+::: 
 
 # Finally lets precict with uncertainty
 
@@ -724,8 +773,17 @@ As we discussed up top, we fit this model using an approach that embraced uncert
 you will see in the graph below of the top x predictions with uncertainty that we plot the mean again, but now with two extra lines representing the 89% confidence intervals. why two you ask? 
 
 - the blue line represents our parameter uncertainty, the range of predictions coming out of our model $\mu$. as you have seen above we don't quite know the value of each parameter and so we present the range of possible models fits that are plausible given the data and model structure.
-- however, as with above we expect (and fit or model with the assumption) that our actually observations are normally distributed about our model prediction ($\mu$), with some standard deviation $\sigma$. so the orange line represents the 89% confidence interval of where we expect our data points to lie, given that our model is not perfect and we have measurement noise.
+- however, as with above we expect (and fit or model with the assumption) that our actually observations are normally distributed about our mean model prediction ($\mu$), with some standard deviation $\sigma$. so the orange line represents the 89% confidence interval of where we expect our data points to lie, given that our model is not perfect and we have measurement noise.
 
 if you look at the code you can see the different terms I'm pulling out of the model.
 
+
+But you ain't seen nothing yet. the real power of Bayes comes from the ability of this workflow to scale to much much more complex models. the extra degree of freedom given by the prior, allows us to fully describe our beliefs about the data in a way that we only glimpsed in this example.
+
 and there we have it, a Bayesian linear fit prediction uncertainty. If you're left with an empty feeling, "all that for some blue and papaya lines and a smug new philosophical approach to model fitting?", that's okay. I'd argue that it still much more plainly laid out the relative confidence we have in each of the terms included in our model, which can only be good for science. But I get it. this post was really about laying the foundations for Bayesian hierarchical models. you can see, when we got the model altogether with the 3 locations, we actually got done great results. there is a lot of shared information in how a beach responds to storms within a fairly narrow geographical area. hierarchical models help us leverage those commonalities, whilst respecting subtle and important differences. and doing so well help us avoid the worst of the demons that lurk in data driven modelling. 
+
+
+
+# Reading list
+
+- [Bayesian workflow](https://betanalpha.github.io/assets/case_studies/principled_bayesian_workflow.html)

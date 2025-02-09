@@ -1,0 +1,1145 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "---\n",
+        "title: \"Fitting a Bayesian linear regression for storm response\"\n",
+        "theme: flatly\n",
+        "from: markdown+emoji\n",
+        "format:\n",
+        "  html:\n",
+        "    toc: true\n",
+        "    number-sections: true\n",
+        "    lightbox: true\n",
+        "editor: source\n",
+        "execute:\n",
+        "  cache: true\n",
+        "---\n",
+        "\n",
+        "\n",
+        "# Setup\n",
+        "\n",
+        "## An ode to linear regressions\n",
+        "\n",
+        "XX STAN uses error scale not std dev.\n",
+        "\n",
+        "Good old fashioned, handful of parameters, linear regressions are great!\n",
+        "\n",
+        "Don't get me wrong I love fitting larger machine learning (ML) models and when you're after raw predictive power there's nothing better than finally getting that huge neural network singing. But in so many applications where you would employ data-driven models, linear regression models (and variations thereof) can hold their own in performance and often be better suited (more manageable, quicker, more interpretable) to the project as a whole. \n",
+        "\n",
+        "There's something very endearing about being able to see all the parameters in your model. A tight knit group that you can call friends when you push that final project deliverable out the door. As ML models get larger, at best they're are filled with acquaintances. More often you're left anxiously gazing into the black-box abyss just hoping to recognise a friendly face.\n",
+        "\n",
+        "For a while now my default method for fitting linear regressions has been Bayesian. Sure uncertainty quantification is :fire:, but really it's the flexibility afforded by a Bayesian framework which lets you guide and extend on simple models to provide just the right level of complexity. Actually this post is a vehicle to a future post which will dive into this flexibility and show off some more interesting aspects (hint: it'll be plenty hierarchical). But we have to get on the bus somewhere, and this is the stop closest to home. Plus I hope there'll be some nice countryside out the window on the way.\n",
+        "\n",
+        "## What this is and what this is not\n",
+        "\n",
+        "::: {.callout-tip}\n",
+        "## IS\n",
+        "A very practical implementation based introduction to Bayesian methods. A, hopefully, relatable hook into a deeper subject.\n",
+        ":::\n",
+        "\n",
+        "::: {.callout-important}\n",
+        "## IS NOT\n",
+        "A comprehensive guide to the theory or practice of Bayesian methods. I'll try refer to other books where more details are needed.\n",
+        ":::\n",
+        "\n",
+        "## The task\n",
+        "\n",
+        "We are going to use a great, openly available dataset that describes sandy beach response to offshore storms (as measured by shoreline change). This comes from the excellent paper:\n",
+        "\n",
+        "Data-driven modelling of coastal storm erosion for real-time forecasting at a wave-dominated embayed beach (Ibaceta and Harley, 2024)\n",
+        "https://doi.org/10.1016/j.coastaleng.2024.104596\n",
+        "\n",
+        "In this paper, the authors fit a really nice linear regression to model the storm response. We show here how an equivalent model could be fit with Bayesian methods to show this alternative appraoch and its concepts.\n",
+        "\n",
+        "::: {.callout-note collapse=\"true\"}\n",
+        "This is not in any way meant to be knock on the use of a frequentist approach in the above paper. I'll show some of the differences as we go along of course, but the true power of applying Bayesian methods only comes when fitting more complex models which we will see in the next post. I use this paper as the data are freely available, the model is already prepared and has been carefully thought about, and it was an excellent (and clear/well-written) use of data-driven modelling to explore storm erosion!\n",
+        ":::\n",
+        "\n",
+        "Anyway I hear you, \"pipe down and show me some data\".\n",
+        "\n",
+        "## The data\n"
+      ],
+      "id": "78572b48"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| include: false\n",
+        "%load_ext autoreload\n",
+        "%autoreload 2\n",
+        "\n",
+        "import os\n",
+        "# cpu cores for sampling\n",
+        "os.environ[\"XLA_FLAGS\"] = \"--xla_force_host_platform_device_count=4\"\n",
+        "\n",
+        "import numpy as np\n",
+        "import pandas as pd\n",
+        "\n",
+        "import matplotlib.pyplot as plt\n",
+        "import seaborn as sns\n",
+        "\n",
+        " # NumPyro for log likelihood example\n",
+        "import numpyro\n",
+        "import numpyro.distributions as dist\n",
+        "\n",
+        "import arviz as az \n",
+        "import xarray as xr\n",
+        "import bambi as bmb\n",
+        "\n",
+        "from functions.plotting import plot_scatter_predictions, fix_forest_plots, plot_scatter_predictions_uncertainty\n",
+        "from functions.utils import rescale_target, calculate_r2_rmse\n",
+        "\n",
+        "np.random.seed(2319)"
+      ],
+      "id": "6ee5dee0",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "We load the data directly from the authors' github repo (thanks again!). As per the selected model in the paper, we will attempt to predict (XX review lang) the change in shoreline position at a given location (`dW`) with the following variables:\n",
+        "\n",
+        "- `Wpre`: The shoreline position before the storm\n",
+        "- `Eocum`: cumulative offshore wave energy during the storm (proportional to significant wave height squared)\n",
+        "- `WLres`: residual of measured water level to astronomical tide\n",
+        "- `Tpeak`: peak offshore wave period during the storm\n",
+        "- `Dpo`: average wave direction during the storm\n",
+        "\n",
+        "The raw data:\n"
+      ],
+      "id": "9b501f0f"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| echo: false\n",
+        " \n",
+        "# Load data from the github repository for the aforementioned paper\n",
+        "fn = \"https://raw.githubusercontent.com/raiibacetav/data-driven-storm-erosion/refs/heads/main/data.csv\"\n",
+        "raw_data = pd.read_csv(fn, index_col=0)\n",
+        "# lets take a peek\n",
+        "display(raw_data.iloc[90:95])"
+      ],
+      "id": "cf259c34",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "There's a bit of data wrangling to get us to the fit-ready format you'll see below. If you wish to see the code I've hacked together to get us into a better format for the Bayesian modelling, then feel free to look below. But I wont subject the reader to this by default.\n",
+        "\n",
+        "::: {.callout-note title=\"Show me the code\" appearance=\"simple\" icon=false collapse=true}\n",
+        "Alright you sick puppy, welcome to the data wrangling. \n"
+      ],
+      "id": "e878b808"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| output: false\n",
+        "\n",
+        "# Define the variables we are interested in\n",
+        "cases = [ \"dW_exposed\",\"dW_partially\", \"dW_sheltered\"]\n",
+        "id_vars = [\"Onset\",\"Eocum\",\"WLres\",\"Tpeak\",\"Dpo\"] # our covariates and Onset for sanity\n",
+        "pre_vars = [\"Wpre{}\".format(_[2:]) for _ in cases]"
+      ],
+      "id": "5d25d8d0",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "We are going to make a little format adjustment just to make filtering between locations easier. in this dataset there are three separate locations at which shoreline change was measured at Narrabeen (named here as \"exposed\", \"partially\" and \"sheltered\"). These are provided as columns in the original data, and here we rework the dataframe to have only a single target variable (`dW`) and convert locations into a column as a categorical variable.\n"
+      ],
+      "id": "a9853459"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "# rework the dataframe\n",
+        "# take only the columns we need\n",
+        "df =  raw_data.copy()[id_vars+pre_vars+cases]\n",
+        "# convert Onset to datetime\n",
+        "df[\"Onset\"] = pd.to_datetime(df[\"Onset\"], dayfirst=True)\n",
+        "# we will convert 3 columns into 2 (category and value) by melting, melting - oh what a world\n",
+        "df = pd.melt(df, id_vars = id_vars + pre_vars, var_name=\"location\", value_name=\"dW\").reset_index(drop=True)\n",
+        "# we\"re going similarly grab the correct prestorm beach position based on the category, the lazy way\n",
+        "for ii in np.arange(df.shape[0]):\n",
+        "    df.loc[ii,\"Wpre\"] = df.loc[ii,\"Wpre{}\".format(df.loc[ii,\"location\"][2:])] \n",
+        "# drop the now obsolete Wpre columns\n",
+        "df = df.drop(columns=pre_vars)\n",
+        "# lets just remove all the unnecessary dW_ in the variable column\n",
+        "df[\"location\"] = df[\"location\"].str.replace(\"dW_\",\"\")\n",
+        "df.sort_values(by=[\"Onset\",\"location\"], inplace=True)\n",
+        "# and lets get rid of any NaNs\n",
+        "df =  df.dropna().reset_index(drop=True)\n",
+        "\n",
+        "display(df.head())"
+      ],
+      "id": "ebb1a471",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "You should be able to see (e.g., from thhe Wpre column) the 1999-02-05 storm (row 92) correctly flowing from `raw_data` through to `df` below (rows 0 - 2, i.e., three total as there are three locations).\n",
+        "\n",
+        "We should take this time to scale our covariates, as the authors did too. Of course we could skip this step but you can see that e.g., `Eocum` is orders of magnitude higher than `WLres`. Leaving the data in this state would make it really hard to interpret the coefficients of our model relative to each other for a start. Secondly, model fitting relies on gradients, and these can get whacky if your variables range over orders of magnitude. Be kind. Show your model some TLC and it'll make your life easier in return ([and if you dont believe me...](https://mc-stan.org/docs/stan-users-guide/efficiency-tuning.html#standardizing-predictors)).\n"
+      ],
+      "id": "e6a6c7f0"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| output: false\n",
+        "# find the max and min of each column - will will normalise as the authors did, by the location\n",
+        "scale_max_vals = df.groupby(\"location\").max()\n",
+        "scale_min_vals = df.groupby(\"location\").min()\n",
+        "# finally, we normalise each covariate to be between 0 and 1 based on location\n",
+        "for col in df.columns.drop([\"Onset\", \"location\"]):\n",
+        "    # add the location specific values as temporary columns\n",
+        "    df[\"scale_max\"] = df[\"location\"].map(scale_max_vals[col])\n",
+        "    df[\"scale_min\"] = df[\"location\"].map(scale_min_vals[col])\n",
+        "    # scale the variable\n",
+        "    df[col] = (df[col] - df[\"scale_min\"]) / (df[\"scale_max\"] - df[\"scale_min\"])\n",
+        "    # hide the evidence\n",
+        "    df = df.drop(columns=[\"scale_max\", \"scale_min\"])"
+      ],
+      "id": "334311e4",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        ":::\n",
+        "\n",
+        "A few moments later... we have our data scaled and in the format we want:\n"
+      ],
+      "id": "0cdb9430"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| echo: false\n",
+        "display(df.head())"
+      ],
+      "id": "ad0cd22f",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "The only conceptually important part of this wrangling was the shift to having the location as a categorical column. Instead of having seperate (e.g.,) `dW` columns for each location, we have a single target variable `dW` and a `location` column that tells us which location the data point is from (so we will now have multiple rows for the same storm event). I am signalling here our modelling intent which you will see come into play below and will put us in the right data frame of mind for more complex modelling.\n",
+        "\n",
+        "## The model\n",
+        "\n",
+        "In the sections below we will focus on the basics of implementing a Bayesian regression. We're limited, of course, by the amount of words that I can responsibly subject you to. So for anyone wanting a comprehensive resource that introduces linear regression from the very basics - [Regression and Other Stories by Gelman, Hill and Vehtari](https://users.aalto.fi/~ave/ROS.pdf).\n",
+        "\n",
+        "To the model. Again, we are not thinking much about coastal processes here. Luckily, the authors have done the hard work and we just get to sit back and crunch numbers 😎. So we follow the model provided in the paper:\n",
+        "\n",
+        "$$\\Delta W = \\beta_0 + \\beta_1 E_{o,cum} + \\beta_2 W_{pre} + \\beta_3 D_{po} + \\beta_4 T_{p,peak} + \\beta_5 WL_{res} + \\epsilon$$\n"
+      ],
+      "id": "bdcc315a"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| include: false\n",
+        "# Here seems as good a spot as any to calculate the output of the paper's model\n",
+        "# coeffs from the paper when I run the fit in the github repo\n",
+        "coefficients = {\n",
+        "    \"exposed\": {\n",
+        "        \"intercept\": 0.100764,\n",
+        "        \"Eocum\": 0.297814,\n",
+        "        \"Wpre\": 0.224563,\n",
+        "        \"Dpo\": -0.111426,\n",
+        "        \"Tpeak\": 0.150129,\n",
+        "        \"WLres\": 0.163962\n",
+        "    },\n",
+        "    \"partially\": {\n",
+        "        \"intercept\": 0.122073,\n",
+        "        \"Eocum\": 0.595315,\n",
+        "        \"Wpre\": 0.272799,\n",
+        "        \"Dpo\": -0.137715,\n",
+        "        \"Tpeak\": 0.11471,\n",
+        "        \"WLres\": -0.036616\n",
+        "    },\n",
+        "    \"sheltered\": {\n",
+        "        \"intercept\": 0.299397,\n",
+        "        \"Eocum\": 0.39053,\n",
+        "        \"Wpre\": 0.139078,\n",
+        "        \"Dpo\": -0.184629,\n",
+        "        \"Tpeak\": -0.019893,\n",
+        "        \"WLres\": -0.004457\n",
+        "    }\n",
+        "}\n",
+        "\n",
+        "# apply to df based on the location column\n",
+        "# Function to calculate regression output\n",
+        "def calculate_regression_output(this_row):\n",
+        "    coeffs = coefficients[this_row[\"location\"]]\n",
+        "    return (coeffs[\"intercept\"] +\n",
+        "            coeffs[\"Eocum\"] * this_row[\"Eocum\"] +\n",
+        "            coeffs[\"Wpre\"] * this_row[\"Wpre\"] +\n",
+        "            coeffs[\"Dpo\"] * this_row[\"Dpo\"] +\n",
+        "            coeffs[\"Tpeak\"] * this_row[\"Tpeak\"] +\n",
+        "            coeffs[\"WLres\"] * this_row[\"WLres\"])\n",
+        "\n",
+        "# apply the function to the dataframe\n",
+        "df[\"dW_pred\"] = df.apply(calculate_regression_output, axis=1)"
+      ],
+      "id": "138725bb",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "We have a model that predicts the change in shoreline ($\\Delta W$) from the additive combination of our five variables (along with an intecept term $\\beta_0$). \n",
+        "\n",
+        "To help us intuit the Bayesian approach to fitting, lets simplify our model. We label our five variables plus intercept collectively as $\\mathbf{X}$. The corresponding coefficients that we must fit for each we label collectively as $\\mathbf{\\beta}$ (see [the here if this notation is unfamiliar](https://en.wikipedia.org/wiki/Linear_regression#Formulation)). \n",
+        "\n",
+        "We can condense our model to:\n",
+        "\n",
+        "$$\n",
+        "\\Delta W = \\mathbf{X} \\mathbf{\\beta} + \\epsilon\n",
+        "$$\n",
+        "\n",
+        "But we musn't forget to discuss the little red caboose languishing at the end, $\\epsilon$. Sometimes it doesn't get the attention of the cars up front, but it's a vital part of the train in any gradient ascent. One way to parse the above would be:\n",
+        "\n",
+        "- $\\mathbf{X} \\mathbf{\\beta}$ describes our model estimating the values of $\\Delta W$\n",
+        "- $\\epsilon$ describes the residuals or errors of our model when considering our data\n",
+        "\n",
+        "In this case we are going to *assume* that our residuals are normally distributed with a standard deviation of $\\sigma$ and centered around zero ($\\mathcal{N}(0, \\sigma)$). Why? This is a good start and a common assumption. Lot of things in nature are gaussian. Plus thinking about the alternatives too hard would lead us into the scary world of generalised linear models, and that's not for us today.\n",
+        "\n",
+        "Okay so putting words into notation:\n",
+        "\n",
+        "$$\n",
+        "\\Delta W = \\mathbf{X} \\mathbf{\\beta} + \\epsilon \\qquad \\epsilon \\sim \\mathcal{N}(0, \\sigma)\n",
+        "$$\n",
+        "\n",
+        "We could also frame this in another way that is perhaps more Bayesian and will align better with our code below. We could say that our observed values of $\\Delta W$ are generated from a normal distribution with mean $\\mathbf{X} \\mathbf{\\beta}$ and standard deviation $\\sigma$. Same emperor, new clothes. $\\sigma$ then becomes another parameter we will learn from the data.\n",
+        "\n",
+        "$$\n",
+        "\\Delta W \\sim \\mathcal{N}(\\mathbf{X} \\mathbf{\\beta}, \\sigma)\n",
+        "$$\n",
+        "\n",
+        "# A brief aside on fitting models\n",
+        "\n",
+        "Right... how the heck does this help us to fit a model? What does fitting even mean in a Bayesian framework? Feel free to skip on to Section 3 if you're just wanting to follow the example without an unexpected journey into model fitting.\n",
+        "\n",
+        "In a Bayesian framework we are not aiming to learn a single set of \"true\" parameter values for our $\\beta$'s and $\\sigma$. That would be so very frequentist, and so instead we treat parameters as being probabilistic. It only makes sense to talk about how probable different values are for the parameters and the range of values that are plausible for our model and data. Maybe there's a single true value to be found. Theoretically if we had the perfect model and infinite data... yeah no, that's never going happen when modelling an environment system 🥲. \n",
+        "\n",
+        "There's no reason to get any more into frequentist vs Bayesian approaches, I only bring it up to highlight a key pivot to be made as most people default to frequentist approaches. Both are great, both are useful, both can quantify uncertainty even. But this is a post about Bayes and that'll be that.\n",
+        "\n",
+        "We call the description of probable values for our parameters the posterior distribution. To get to our posterior distribution we need three things:\n",
+        "\n",
+        "1. a model that includes a specified likelihood function\n",
+        "2. prior distributions for each of our paramaters\n",
+        "3. an algorithm to take samples from the posterior\n",
+        "4. data\n",
+        "\n",
+        "We have #4, so let's tackle the first three.\n",
+        "\n",
+        "## Likelihood\n",
+        "\n",
+        "The likelihood is a measure of how likely the data are given the model and a set of parameter values. The better fit to the data that a set of parameter values gives, the more we should believe that those values are plausible. Notice the little flip we did there, the Bayes rule helps us to navigate from the likelihood of the data given the parameters to what we will call our posterior distribution for the paramaters (describing probable values) given the data (XX review).\n",
+        "\n",
+        "XXXX\n",
+        "- we need to fit the params ($\\mu$ or the betas that make up $\\mu$, and $\\sigma$) based on how well they explain the data\n",
+        "\"What this means, recall, is that the machine considers every possible combination of the  parameter values. With a linear model, some of the parameters now stand for the strength  of association between the mean of the outcome, µ, and the value of some other variable.  For each combination of values, the machine computes the posterior probability, which is  a measure of relative plausibility, given the model and data. So the posterior distribution  ranks the infinite possible combinations of parameter values by their logical plausibility.\"\n",
+        "\n",
+        "Luckily for us, our assumptions about the form of the model/data generating process that we specified above give rise to a likelihood. \n",
+        "\n",
+        "XX WHAT is a PPL\n",
+        "\n",
+        "By using a Probabilistic Programming Language (PPL) like [`NumPyro`](https://num.pyro.ai/en/latest/index.html) to specify our model, we can get this without even breaking a sweat.\n",
+        "\n",
+        "If the above paragraphs were confusing, that's okay. We're going to specify it in a code example below which will help. I am going to generate some synthetic data that relates a variable `X` to target `y` with a simple linear relationship plus guassian noise (`np.random.randn`).\n"
+      ],
+      "id": "22e5b612"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "# make dummy data for X, then generate y data using:\n",
+        "# y = 0.1 X + 0.2 + N(0, 0.1)\n",
+        "X = np.random.randn(100)\n",
+        "y = 0.1 * X + 0.2 + 0.1 * np.random.randn(100)"
+      ],
+      "id": "dcd3dad7",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "We can specify our linear regression model using a PPL. Then, given some propsed values for the parameters, NumPyro will tell us the log-likelihood for these values given the model and the data. Sweet.\n",
+        "\n",
+        "::: {.callout-note title=\"Show me the code\" appearance=\"simple\" icon=false collapse=true}\n"
+      ],
+      "id": "82d7bbb5"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "# build a simple model for this in NumPyro\n",
+        "def model(X, y=None):\n",
+        "    # Define priors\n",
+        "    beta_0 = numpyro.sample(\"beta_0\", dist.Normal(0, 1)) # <1>\n",
+        "    beta_1 = numpyro.sample(\"beta_1\", dist.Normal(0, 1)) # <1>\n",
+        "    sigma = numpyro.sample(\"sigma\", dist.Exponential(1)) # <1>\n",
+        "    # Define the model\n",
+        "    mu = beta_0 + beta_1 * X # <2>\n",
+        "    # store the model prediction before we account for the error # <2>\n",
+        "    numpyro.deterministic(\"mu\", mu) # <2>\n",
+        "    # and then finally sample so we can compare to our observations\n",
+        "    numpyro.sample(\"y_out\", dist.Normal(mu, sigma), obs=y)  # <3>"
+      ],
+      "id": "9ce03943",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "1. The first few lines define the prior distrbituions for the parameters in our model - explained in Section 2.2 below.\n",
+        "\n",
+        "2. We define the model as a linear regression with an intercept (`beta_0`) and a slope (`beta_1`). `mu` ($\\mu$) stores the mean of this model as we defined above i.e., $\\mu = \\mathbf{X}\\mathbf{\\beta}$.\n",
+        "\n",
+        "3. Finally we tell the model how we think the residuals are distributed about $\\mu$. This line is a direct translation of our equation from above $y \\sim \\mathcal{N}(\\mathbf{X} \\mathbf{\\beta}, \\sigma)$.\n"
+      ],
+      "id": "1b92c198"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| code-fold: true\n",
+        "#| code-summary: \"Log-likelihood code\" \n",
+        "#| output: false\n",
+        "# generate 10 possible solutions\n",
+        "proposed_values = {\n",
+        "    \"beta_0\" : np.array([0.2, 0.1, 0.05, 0.19, 0.21, 0.4, 0.45, 0.25, 0.05, 0.2]),\n",
+        "    \"beta_1\" : np.array([0.1, 0.2, 0.05, 0.11, 0.09, 0, -0.1, 0.15, 0.2, 0.3]),\n",
+        "    \"sigma\" : np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])\n",
+        "}\n",
+        "# get the log likihood\n",
+        "loglik = numpyro.infer.util.log_likelihood(\n",
+        "    model = model, \n",
+        "    posterior_samples = proposed_values,\n",
+        "    X = X, \n",
+        "    y = y\n",
+        ")"
+      ],
+      "id": "7572f71e",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        ":::\n",
+        "\n",
+        "You can see below that fits (i.e., values for our parameters) that lie closer to our true model parameters ($0.1 * x + 0.2$) have higher log-likelihoods. As we would expect right, they fit the data better. So there we have it, a method for assessing goodness of fit, we're well on our way to a posterior. And much of the hard work done for us, goodee.\n"
+      ],
+      "id": "92dc5432"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| echo: false\n",
+        "\n",
+        "# plot the predicted line of each of the proposed solutions coloured by the log likelihood and the data\n",
+        "fig, ax = plt.subplots(figsize=(5,3.5))\n",
+        "ax.scatter(X, y, color=\"black\", s=1)\n",
+        "\n",
+        "# Get the min and max log likelihood values\n",
+        "vmin = loglik[\"y_out\"].mean(axis=1).min()\n",
+        "vmax = loglik[\"y_out\"].mean(axis=1).max()\n",
+        "\n",
+        "for i in range(len(loglik[\"y_out\"])):\n",
+        "    # and weight the width of the line by the log likelihood\n",
+        "    ax.plot(X, X * proposed_values[\"beta_1\"][i] + proposed_values[\"beta_0\"][i], color=plt.cm.viridis((loglik[\"y_out\"][i].mean() - vmin) / (vmax - vmin)), alpha=0.75, lw=2)\n",
+        "\n",
+        "ax.set_xlabel(\"X\", fontsize=14)\n",
+        "ax.set_ylabel(\"y\", fontsize=14)\n",
+        "ax.grid(True, which=\"both\", linestyle=\"--\", linewidth=0.5, color=\"lightgrey\")\n",
+        "\n",
+        "sm = plt.cm.ScalarMappable(cmap=\"viridis\", norm=plt.Normalize(vmin=vmin, vmax=vmax))\n",
+        "sm.set_array([])\n",
+        "fig.colorbar(sm, ax=ax, label=\"log-likelihood\")\n",
+        "plt.show()"
+      ],
+      "id": "08dece7c",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "::: {.callout-note collapse=\"true\"}\n",
+        "For the graph above: the higher the likelihood the better (hence why you may have heard of maximum likelihood estimation).\n",
+        ":::\n",
+        "\n",
+        "## Raising a model\n",
+        "\n",
+        "We are going to talk more about prior distributions below. For now all we need to know is that the model needs us to work hand in hand with it. A Bayesian approach is guiding the model, supporting it and empowering it to achieve a good fit. Infinity is an frighteningly large search space, and without some guidance we are sending our model out in the big wide world all alone. We use prior knowledge to define some reasonable space in which we expect to find plausible values for our parameters. \n",
+        "\n",
+        "The aim is to give the model a nice wide field to explore but not have it wander off a numerical cliff. In environmental science its fairly easy to define what's silly. For example, can a shoreline erode 100,000 m during a single storm event? If it could we'd be in strife so we can pretty safely give very little probability to parameter values that produce such outlandish numbers. We use prior distributions to impart this belief on the model, leaving it then do its own exploration with this information, the data, and the likelihood function.\n",
+        "\n",
+        "## Relax and let the machine do its job\n",
+        "\n",
+        "Our machine for obtaining samples to build a picture of the posterior distribution for our parameters is going to be Markov Chain Monte Carlo (MCMC). For a great introduction to MCMC please go explore many better sources than I, for example [this lecture](https://youtu.be/rZk2FqX2XnY?si=UpGAmJ3LEGXtGSz-&t=610) from Richard McElreath\"s great Statistical Rethinking course.\n",
+        "\n",
+        "For our purposes and for the rest of this blog we are going to treat the process of obtaining the posterior distribution as a magic. We first specify the data generating process with our model. Then the python implementation of the sampling fairy floats down from the clouds, pries open the chassis of my laptop and greedily feeds on the power being fed to my CPU for a period of seconds to minutes. The gorged fairy, now satiated, waves its magic wand and voilà! Samples from the posterior distribution are delivered into memory, rendered into figures, and subsequently delivered express to our eyeballs.\n",
+        "\n",
+        "::: {.callout-tip collapse=\"true\"}\n",
+        "## Tip\n",
+        "The blood of the CPU will keep you alive, even if you're an inch from death, but at a terrible price...\n",
+        ":::\n",
+        "\n",
+        "Of course, I should mention that we pay the flashy uncertainty bands et al. of a Bayesian fit with a (mostly very modest) computational cost. Sometimes this cost can sneak up on you for more complex models, but for a lot of problems in the environmental space the time difference is small/manageable on modern compute. I've skimmed through enough articles to know attention spans are shorter than ever, or something to that effect, but surely we can spare a extra seconds to give our model a glow up.\n",
+        "\n",
+        "# Back to business\n",
+        "\n",
+        "## A location smoothie\n",
+        "\n",
+        "Now what we maybe have a little bit more of an intuition about how we fit the model in Bayes and get the elusive posterior distribution, let's turn back to our original example. We're going to look at how to mix the ingredients ready for sampling using the [`Bambi` package](https://bambinos.github.io/bambi/). `Bambi` relies on the `PyMC` package as the underlying PPL to construct the model and sample from the posterior distribution.\n",
+        "\n",
+        "For `Bambi` to work its magic, we need to supply it with a structure for the model that that:\n",
+        "\n",
+        "- describes the parameters in our model and specifies prior distributions for each (though `Bambi` will adopt some default priors if you're lazy)\n",
+        "- specifies the model that, given the data and the parameters, estimates the target (y)\n"
+      ],
+      "id": "5f87bac1"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| output: false\n",
+        "# define our model\n",
+        "mod_smoothie = bmb.Model(\n",
+        "        formula = \"dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres\", # <1>\n",
+        "        data = df, # <2>\n",
+        "        priors = { # <3>\n",
+        "            \"Intercept\": bmb.Prior(\"Normal\", mu = 0, sigma = 1), # <3>\n",
+        "            \"Eocum\": bmb.Prior(\"Normal\", mu = 0, sigma = 1), # <3>\n",
+        "            \"Wpre\": bmb.Prior(\"Normal\", mu = 0, sigma = 1), # <3>\n",
+        "            \"Dpo\": bmb.Prior(\"Normal\", mu = 0, sigma = 1), # <3>\n",
+        "            \"Tpeak\": bmb.Prior(\"Normal\", mu = 0, sigma = 1), # <3>\n",
+        "            \"WLres\": bmb.Prior(\"Normal\", mu = 0, sigma = 1), # <3>\n",
+        "            \"sigma\": bmb.Prior(\"HalfNormal\", sigma = 2) # <3>\n",
+        "        }, # <3>\n",
+        "        family = \"gaussian\" # <4>\n",
+        "    )\n",
+        "\n",
+        "# tell Bambi to draw samples using MCMC\n",
+        "fit_smoothie = mod_smoothie.fit( # <5>\n",
+        "    draws = 2000, # <5>\n",
+        "    idata_kwargs=dict(log_likelihood = True) # <5>\n",
+        ") # <5>\n",
+        "# and make predcictions (added to fit_smoothie)\n",
+        "mod_smoothie.predict(fit_smoothie, kind = \"response\") # <6>"
+      ],
+      "id": "6aecd7fe",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "1. this is the model itself. It specifies the same equation we saw above naming all of the columns of the data (from `df` that we will use), `Bambi` implictly then fits a $\\beta$ term per covariate. We have defined how we expect the input to be related to the output (in this case via a simple additive linear model). \n",
+        "\n",
+        "2. Models, oh how they covet data.\n",
+        "\n",
+        "3. Really the specification of the prior is the main new part from what the authors did in their paper. Here we list each of our parameters (or the variables with corresponding $\\beta$ parameters), and tell the model a space in which we expect to find the plausible values for these parameters. Here we won't think to hard about this, how about something close to we are 68% sure that our paramaeter values lie between -1 and 1, 95% sure they're between -2 and 2. Ths corresponds to a prior of $\\beta \\sim \\mathcal{N}(0, 1)$. We have one other type of prior we used, and that is the `HalfNormal` prior for $\\sigma$. $\\sigma$ is a little special compared to the other parameters and that's because error scale cannot be negative. A normal distribution with negative standard deviation doesn't make sense. So in this case we use smile meditation and a half normal prior (bounded at 0) to enforce positivity.\n",
+        "\n",
+        "4. the next part is specifies the form of the residuals if you want to think about it that way, or the final part in the data generating process modelling the distribution of observations given the model as we saw above. This defines our likelihood again (XX check Vs the stan definition which is different I think as it includes the prior) as discussed above. \n",
+        "\n",
+        "5. Now lets fit the model, letting the sampling fairy do its work to take 2000 samples from the posterior using MCMC\n",
+        "\n",
+        "6. Last of all we make predictions on the data using the model so that we can compare the fit to Figure 8 of the paper and check we haven't stuffed anything up\n",
+        "\n",
+        "Oh you're so close to seeing a model fit, but following a [good Bayesian workflow](https://doi.org/10.48550/arXiv.2011.01808) we're going to check our priors first. Remember we set out with the goal of merely shaving the edges off infinity to a sensible range. Lets wee how we did. Luckily `Bambi` provides a convenience function (`.plot_priors()`) for this. You can see first of all in practice how much weight we are giving various values, as we said above telling the model we are quite sure the values lie between -2 and 2.\n"
+      ],
+      "id": "b49fe965"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "# plot the prior distributions themselves \n",
+        "mod_smoothie.plot_priors()\n",
+        "# and sample from the priors to get predictions\n",
+        "prior_pred = mod_smoothie.prior_predictive()"
+      ],
+      "id": "954dfb56",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "You can see the second convenience function we used in the code above, `prior_predictive()`. This is kind of cool, because of our conceptualisation of the mdoel as represeting a data generating process we can get predicitons stright off the bat using only our priors. So we can see below that for the top 10 storms, our prior belief is that the shoreline change will be less than 1000s of meters. Our model predicts a mean of around 0 and the coloured bars show the 89% confidence intervals for our predictions (more on this below). So again, not too restrictive but we've helped the sampler into a reasonable search space.\n"
+      ],
+      "id": "90cff1bf"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| echo: false\n",
+        "# lets lazily and in an ugly fashion get our predictions\n",
+        "plot_df = pd.DataFrame({\n",
+        "    \"dW\": df[\"dW\"],\n",
+        "    \"dW_pred_mean\": prior_pred.prior[\"mu\"].mean(dim=[\"chain\", \"draw\"]).values,\n",
+        "    \"dW_pred_median\": prior_pred.prior[\"mu\"].median(dim=[\"chain\", \"draw\"]).values,\n",
+        "    \"dW_pred_hdi_lower\": az.hdi(prior_pred.prior[\"mu\"], hdi_prob=0.89)[\"mu\"].sel(hdi=\"lower\").values,\n",
+        "    \"dW_pred_hdi_higher\": az.hdi(prior_pred.prior[\"mu\"], hdi_prob=0.89)[\"mu\"].sel(hdi=\"higher\").values,\n",
+        "    \"dW_obs_hdi_lower\": az.hdi(prior_pred.prior_predictive[\"dW\"], hdi_prob=0.89)[\"dW\"].sel(hdi=\"lower\").values,\n",
+        "    \"dW_obs_hdi_higher\": az.hdi(prior_pred.prior_predictive[\"dW\"], hdi_prob=0.89)[\"dW\"].sel(hdi=\"higher\").values,\n",
+        "    \"location\": df[\"location\"],\n",
+        "    \"dW_paper\": df[\"dW_pred\"]\n",
+        "})\n",
+        "\n",
+        "plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals, target_appends=[\"\", \"_paper\", \"_pred_mean\", \"_pred_median\", \"_pred_hdi_lower\", \"_pred_hdi_higher\", \"_obs_hdi_lower\", \"_obs_hdi_higher\"])\n",
+        "\n",
+        "plot_scatter_predictions_uncertainty(plot_df, target_append=\"_pred_median\", title = \"Prior predictive check\")"
+      ],
+      "id": "89c42901",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "And now we come to our beautiful posterior distributions which we can examine using the `arviz` package.\n"
+      ],
+      "id": "9358da71"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "ax1 = az.plot_forest(\n",
+        "    fit_smoothie,\n",
+        "    var_names=[\"~sigma\", \"~mu\"],\n",
+        "    combined = True,\n",
+        "    hdi_prob = 0.89,\n",
+        "    figsize = (5, 4)\n",
+        ")\n",
+        "fix_forest_plots(ax1[0])\n",
+        "plt.show()"
+      ],
+      "id": "88155b8c",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Okay we have some $\\beta$s now. You can read the paper if you want the indepth analysis, but broadly for example for this model we see shoreline change is most strongly associated with $E_{o,cum}$, with higher offshore wave energy producing more erosion on average. We can see that we are quite uncertain as to the effect of $WL_{res}$ with the confidence intervals straddling zero (note: for this model).\n",
+        "\n",
+        "While we won't cover it here, `arviz` provides excellent diagnostics for viewing the sampling traces and checking for convergence. This can be really useful if things are going wrong with your model, Bayes will typically be quite transparent when you've messed up. While this can sometime lead to hours/days of hair pulling trying to get complex models working, I think that a tendency not to silently fail is a real strength. Good friends have the courage to tell you when you've made a mistake.\n",
+        "\n",
+        "::: {.callout-note title=\"Show me example code\" appearance=\"simple\" icon=false collapse=true}\n"
+      ],
+      "id": "20b989a5"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "# plot the trace to see how sampling progressed \n",
+        "az.plot_trace(\n",
+        "    fit_smoothie,\n",
+        "    var_names = [\"Intercept\", \"sigma\"],\n",
+        "    figsize = (8, 5)\n",
+        ")\n",
+        "# convergence diagnostics - close to 1 is good\n",
+        "az.rhat(fit_smoothie)"
+      ],
+      "id": "89db1bb6",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        ":::\n",
+        "\n",
+        "Finally, saving the best until last - lets plot the predicitons of the model vs the data and compare to the paper to make sure we are on the right track.\n"
+      ],
+      "id": "fdfaada8"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| echo: false\n",
+        "# plot the mean prediction of the model against the observed data\n",
+        "plot_df = pd.DataFrame({\n",
+        "    \"dW\": df[\"dW\"],\n",
+        "    \"dW_pred\": fit_smoothie.posterior[\"mu\"].mean(dim=[\"chain\", \"draw\"]).values,\n",
+        "    \"location\": df[\"location\"],\n",
+        "    \"dW_paper\": df[\"dW_pred\"]\n",
+        "})\n",
+        "\n",
+        "plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals)\n",
+        "\n",
+        "# calculate the R2 for each of dW_pred and dW_paper per location\n",
+        "r2_scores, rmse_scores = calculate_r2_rmse(plot_df)\n",
+        "\n",
+        "plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append=\"_paper\", title = \"Paper predictions\")\n",
+        "\n",
+        "plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append=\"_pred\", title = \"Bayesian predictions\")"
+      ],
+      "id": "eac386a2",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Looking good, particularly for the partially sheltered location. But we are not matching the paper predictions and the keen eyed reader will understand why. We fit the model with no reference to the different locations. Our data have heterogeneity - different responses to the same storm event at different locations. What we've fit is one parameter to rule them all (per variable).\n",
+        "\n",
+        "But don't worry I've got you, dawg. We set the data up at the start to make it really easy to build model complexity for just this scenario (whilst keeping the ability to extend into hierarchical models later on).\n",
+        "\n",
+        "## A dash more complexity\n",
+        "\n",
+        "As a next step, we could consider that the three locations respond in the same way to storms, but have a different average response. For example, we think that $E_{o,cum}$ is always going to be a large driver of shoreline change, with the same sign correlation (positive or negative) at each location. But that our predicted shoreline change for an average storm would be different when looking at a part of the beach that is sheltered/partially sheltered/exposed.\n",
+        "\n",
+        "This we can call a group level intercept, i.e., a different intercept for each of our three locations which form the different groups in our dataset.\n"
+      ],
+      "id": "21c08578"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| output: false\n",
+        "# fit the location smoothie model\n",
+        "mod_int_smoothie = bmb.Model(\n",
+        "        \"dW ~ 0 + location + Eocum + Wpre + Dpo + Tpeak + WLres\", # <1>\n",
+        "        df, \n",
+        "        priors = {\n",
+        "            \"location\": bmb.Prior(\"Normal\", mu = 0, sigma = 1),\n",
+        "            \"Eocum\": bmb.Prior(\"Normal\", mu = 0, sigma = 1),\n",
+        "            \"Wpre\": bmb.Prior(\"Normal\", mu = 0, sigma = 1),\n",
+        "            \"Dpo\": bmb.Prior(\"Normal\", mu = 0, sigma = 1),\n",
+        "            \"Tpeak\": bmb.Prior(\"Normal\", mu = 0, sigma = 1),\n",
+        "            \"WLres\": bmb.Prior(\"Normal\", mu = 0, sigma = 1),\n",
+        "            \"sigma\": bmb.Prior(\"HalfNormal\", sigma=10)\n",
+        "        },\n",
+        "        family = \"gaussian\"\n",
+        "    )\n",
+        "# sampling fairy do your thing\n",
+        "fit_int_smoothie = mod_int_smoothie.fit(\n",
+        "    draws = 2000,\n",
+        "    idata_kwargs=dict(log_likelihood = True)\n",
+        ")\n",
+        "# and make predcictions (added to fit_int_smoothie)\n",
+        "mod_int_smoothie.predict(fit_int_smoothie, kind = \"response\")"
+      ],
+      "id": "fa7cc644",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "1. Note that we have updated the model now to have `location` (a factor) as a variable. This will create one intercept per location. We also add `0 +` to indicate to the model that we don't want an overall intercept term. This would be unidentfiable as it could equally have a value or be abosrbed into the location intercepts.\n",
+        "\n",
+        "Lets see the difference to our old \"smoothie\" model where we simply blended the locations together.\n"
+      ],
+      "id": "39bc27f8"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| echo: false\n",
+        "az.plot_forest(\n",
+        "    [fit_smoothie, fit_int_smoothie],\n",
+        "    var_names=[\"~sigma\", \"~mu\"],\n",
+        "    model_names=[\"Smoothie\", \"Location intercept\"],\n",
+        "    combined = True,\n",
+        "    hdi_prob = 0.89,\n",
+        "    figsize = (5, 8)\n",
+        ")\n",
+        "plt.show()"
+      ],
+      "id": "f7404914",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Hey! Nice, you can see from the forest plot that the estimates for each parameter have barely changed, and that we now have those group level intercepts. \n"
+      ],
+      "id": "64050a8e"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| echo: false\n",
+        "# plot the mean prediction of the model against the observed data\n",
+        "plot_df = pd.DataFrame({\n",
+        "    \"dW\": df[\"dW\"],\n",
+        "    \"dW_pred\": fit_int_smoothie.posterior[\"mu\"].mean(dim=[\"chain\", \"draw\"]).values,\n",
+        "    \"location\": df[\"location\"],\n",
+        "    \"dW_paper\": fit_smoothie.posterior[\"mu\"].mean(dim=[\"chain\", \"draw\"]).values\n",
+        "})\n",
+        "\n",
+        "plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals)\n",
+        "\n",
+        "# calculate the R2 for each of dW_pred and dW_paper per location\n",
+        "r2_scores, rmse_scores = calculate_r2_rmse(plot_df)\n",
+        "\n",
+        "plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append=\"_paper\", title = \"Bayesian smoothie predictions\")\n",
+        "\n",
+        "plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append=\"_pred\", title = \"Bayesian intercept predictions\")"
+      ],
+      "id": "3e70130e",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "We've lifted our performance a fair bit at the exposed location and a little at the sheltered location. This is nothing to scoff at, we explain a lot of the variability with common regression terms at all locations and a group level intercept. It's a nice model, and really this results is not unexpected. Beaches erode during storms, to varying degrees depending on the location, but we can expect that the physical drivers of shoreline change have similar effects along a single embayed beach such as this.\n",
+        "\n",
+        "Just like that we have stumbled into the the beginnings of a hierarchical model here, by a loose definition. Some parameters share information from the various groupings in the data and some are found seperately per group. We can get a little bit smarter about how we do this, in time...\n",
+        "\n",
+        "Instead, let's do this model justice and return to fitting the way the authors intended, just Bayesian. There are three locations and, as the authors identified, there are small but important differences in the response behaviours at these locations. \n",
+        "\n",
+        "::: {.callout-note title=\"Coarse sand graining\" appearance=\"simple\" icon=false collapse=true}\n",
+        "At least this is true at the level at which we are describing our processes. There is no difference in the fundamental physics at each location. Quarks be quarks and do quark stuff no matter where they are found on the beach. And perhaps physics based models might resolve the processes down to the level that it can represent the different observed behaviours without resorting to tuning parameter values at each (though IMHO this has been way too hard to achieve with any of these sorts of models that I've worked with). But definitely at the coarse grained level we are describing the processes at with our simple linear model, we expect the parameter fits to be different at each location which will have different responses to the same offshore storm.\n",
+        ":::\n",
+        "\n",
+        "And so we bestow upon each location it's own $\\beta$ parameters for each covariate which can be fit by the model. Luckily our data are in a format that will make this very easy as we started to do above. If we specify to the model it needs three parameters for each $\\beta$, we can use the corresponding $\\beta$s for each data point depending on its location. We tell this to `Bambi` with the following formula:\n"
+      ],
+      "id": "f0d121f8"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "mod_factors = bmb.Model(\n",
+        "    \"dW ~ 0 + location + Eocum:location + Wpre:location + Dpo:location + Tpeak:location + WLres:location\", # <1>\n",
+        "    df,\n",
+        "    family = \"gaussian\"\n",
+        ")"
+      ],
+      "id": "20f69816",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "1. we are now specifying each variable to have one parameter per location with the `:location` syntax. If you don't believe me, look below to the forest plots and beg forgiveness for your ever having doubted me.\n"
+      ],
+      "id": "8970e7a1"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| include: false\n",
+        "fit_factors_raw = mod_factors.fit(\n",
+        "    draws = 2000,\n",
+        "    idata_kwargs=dict(log_likelihood = True)\n",
+        ")\n",
+        "# add the predictions\n",
+        "mod_factors.predict(fit_factors_raw, kind = \"response\")"
+      ],
+      "id": "01c05e70",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| include: false\n",
+        "# rename location to Intercept\n",
+        "fit_factors = fit_factors_raw.copy()\n",
+        "fit_factors.posterior = fit_factors_raw.posterior.rename({\"location\": \"Intercept\"})\n",
+        "\n",
+        "# add new coord \"location\" = \"location_dim\"\n",
+        "fit_factors = fit_factors.assign_coords({\"location\": fit_factors.posterior[\"location_dim\"].values})\n",
+        "\n",
+        "fit_factors.posterior[\"Intercept\"] = fit_factors.posterior[\"Intercept\"].rename({\"location_dim\": \"location\"})\n",
+        "\n",
+        "# now change Dpo, Eocum, Tqw1    peak, WLres, Wpre to have dimensions (chain, draw, location)\n",
+        "for var in [\"Dpo:location\", \"Eocum:location\", \"Tpeak:location\", \"WLres:location\", \"Wpre:location\"]:\n",
+        "    fit_factors.posterior[var] = fit_factors.posterior[var].rename({var.split(\":\")[0]+\":location_dim\": \"location\"})\n",
+        "\n",
+        "    fit_factors.posterior = fit_factors.posterior.rename({var: var.split(\":\")[0]})"
+      ],
+      "id": "7721dcb0",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Lets look at our beautiful posterior distributions.\n"
+      ],
+      "id": "011544c0"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| echo: false\n",
+        "az.plot_forest(\n",
+        "    [fit_factors, fit_smoothie],\n",
+        "    var_names=[\"~sigma\", \"~mu\"],\n",
+        "    model_names=[\"Per location\", \"Smoothie\"],\n",
+        "    combined = True,\n",
+        "    hdi_prob = 0.89,\n",
+        "    figsize = (5, 8)\n",
+        ")\n",
+        "plt.show()"
+      ],
+      "id": "7c7987a7",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "I really like these plots, we see how the locations differ from each other in small but important ways. We can see locations at which we are more certain/uncertain of the effect of each covariate. We also see how these estimates pool together into a single $\\beta$ for our \"smoothie\" model.\n"
+      ],
+      "id": "4637bc23"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| include: false\n",
+        "run_check = False\n",
+        "\n",
+        "if run_check:\n",
+        "    # A check on the assumptions of shared sigma - factors vs indiv fit \n",
+        "    fit = []\n",
+        "    for location in df[\"location\"].unique():\n",
+        "        # subset df to be only location\n",
+        "        df_sub = df.loc[df[\"location\"] == location]\n",
+        "        mod = bmb.Model(\n",
+        "            \"dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres\",\n",
+        "            df_sub,\n",
+        "            family = \"gaussian\"\n",
+        "        )\n",
+        "        fit_raw = mod.fit(\n",
+        "            draws = 2000\n",
+        "        ).assign_coords({\"location\": location})\n",
+        "        fit.append(fit_raw.posterior)\n",
+        "\n",
+        "    fit = xr.concat([_ for _ in fit], dim = \"location\")\n",
+        "\n",
+        "    az.plot_forest(\n",
+        "        [fit, fit_factors, fit_smoothie],\n",
+        "        var_names=[\"~sigma\", \"~mu\"],\n",
+        "        combined = True,\n",
+        "        hdi_prob = 0.89,\n",
+        "        figsize = (5, 8)\n",
+        "    )"
+      ],
+      "id": "97c3e142",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "Once more we plot the predictions and compare back to the paper to check that we recovered similar goodness of fit. \n"
+      ],
+      "id": "9490a3e0"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| echo: false\n",
+        "# plot the mean prediction of the model against the observed data\n",
+        "plot_df = pd.DataFrame({\n",
+        "    \"dW\": df[\"dW\"],\n",
+        "    \"dW_pred\": fit_factors_raw.posterior[\"mu\"].mean(dim=[\"chain\", \"draw\"]).values,\n",
+        "    \"location\": df[\"location\"],\n",
+        "    \"dW_paper\": df[\"dW_pred\"]\n",
+        "})\n",
+        "\n",
+        "plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals)\n",
+        "\n",
+        "# calculate the R2 for each of dW_pred and dW_paper per location\n",
+        "r2_scores, rmse_scores = calculate_r2_rmse(plot_df)\n",
+        "\n",
+        "plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append=\"_paper\", title = \"Paper predictions\")\n",
+        "\n",
+        "plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append=\"_pred\", title = \"Bayesian factors predictions\")\n",
+        "\n",
+        "az.plot_forest(\n",
+        "    [fit_factors, fit_smoothie],\n",
+        "    var_names=[\"~sigma\", \"~mu\"],\n",
+        "    combined = True,\n",
+        "    hdi_prob = 0.89,\n",
+        "    figsize = (5, 8)\n",
+        ")\n",
+        "plt.show()"
+      ],
+      "id": "3c30a544",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "::: {.callout-note title=\"Model comparison example\" appearance=\"simple\" icon=false collapse=true}\n",
+        "We can compare the models (aiming for a higher elpd_loo value) using `az.compare` and see that each step we took improved the model.\n"
+      ],
+      "id": "0d48e8c6"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "# Compare loo for the three models\n",
+        "az.compare(\n",
+        "    {\n",
+        "        \"factors\": fit_factors_raw,\n",
+        "        \"smoothie\": fit_smoothie,\n",
+        "        \"int_smoothie\": fit_int_smoothie\n",
+        "    }\n",
+        ")"
+      ],
+      "id": "175d9675",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "::: \n",
+        "\n",
+        "# Finally lets precict with uncertainty\n",
+        "\n",
+        "Finally lets use the fact that we fit with uncertainty to do prediction with said uncertainty."
+      ],
+      "id": "dda8b7be"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {},
+      "source": [
+        "#| echo: false\n",
+        "# lets lazily and in an ugly fashion get our predictions\n",
+        "plot_df = pd.DataFrame({\n",
+        "    \"dW\": df[\"dW\"],\n",
+        "    \"dW_pred_mean\": fit_factors_raw.posterior[\"mu\"].mean(dim=[\"chain\", \"draw\"]).values,\n",
+        "    \"dW_pred_median\": fit_factors_raw.posterior[\"mu\"].median(dim=[\"chain\", \"draw\"]).values,\n",
+        "    \"dW_pred_hdi_lower\": az.hdi(fit_factors_raw.posterior[\"mu\"], hdi_prob=0.89)[\"mu\"].sel(hdi=\"lower\").values,\n",
+        "    \"dW_pred_hdi_higher\": az.hdi(fit_factors_raw.posterior[\"mu\"], hdi_prob=0.89)[\"mu\"].sel(hdi=\"higher\").values,\n",
+        "    \"dW_obs_hdi_lower\": az.hdi(fit_factors_raw.posterior_predictive[\"dW\"], hdi_prob=0.89)[\"dW\"].sel(hdi=\"lower\").values,\n",
+        "    \"dW_obs_hdi_higher\": az.hdi(fit_factors_raw.posterior_predictive[\"dW\"], hdi_prob=0.89)[\"dW\"].sel(hdi=\"higher\").values,\n",
+        "    \"location\": df[\"location\"],\n",
+        "    \"dW_paper\": df[\"dW_pred\"]\n",
+        "})\n",
+        "\n",
+        "plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals, target_appends=[\"\", \"_paper\", \"_pred_mean\", \"_pred_median\", \"_pred_hdi_lower\", \"_pred_hdi_higher\", \"_obs_hdi_lower\", \"_obs_hdi_higher\"])\n",
+        "\n",
+        "plot_scatter_predictions_uncertainty(plot_df, target_append=\"_pred_median\", title = \"Bayesian factors predictions\")"
+      ],
+      "id": "1a96b318",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {},
+      "source": [
+        "As we discussed up top, we fit this model using an approach that embraced uncertainty at its core. We should make sure we are utilising that for prediction. Above I've been wasteful, throwing our posterior into the trash compactor to come up with a mean prediction for each point. But it doesn't have to be this way, we value the posterior and the information contained therein, let's display it below.\n",
+        "\n",
+        "you will see in the graph below of the top x predictions with uncertainty that we plot the mean again, but now with two extra lines representing the 89% confidence intervals. why two you ask? \n",
+        "\n",
+        "- the blue line represents our parameter uncertainty, the range of predictions coming out of our model $\\mu$. as you have seen above we don't quite know the value of each parameter and so we present the range of possible models fits that are plausible given the data and model structure.\n",
+        "- however, as with above we expect (and fit or model with the assumption) that our actually observations are normally distributed about our mean model prediction ($\\mu$), with some standard deviation $\\sigma$. so the orange line represents the 89% confidence interval of where we expect our data points to lie, given that our model is not perfect and we have measurement noise.\n",
+        "\n",
+        "if you look at the code you can see the different terms I'm pulling out of the model.\n",
+        "\n",
+        "\n",
+        "But you ain't seen nothing yet. the real power of Bayes comes from the ability of this workflow to scale to much much more complex models. the extra degree of freedom given by the prior, allows us to fully describe our beliefs about the data in a way that we only glimpsed in this example.\n",
+        "\n",
+        "and there we have it, a Bayesian linear fit prediction uncertainty. If you're left with an empty feeling, \"all that for some blue and papaya lines and a smug new philosophical approach to model fitting?\", that's okay. I'd argue that it still much more plainly laid out the relative confidence we have in each of the terms included in our model, which can only be good for science. But I get it. this post was really about laying the foundations for Bayesian hierarchical models. you can see, when we got the model altogether with the 3 locations, we actually got done great results. there is a lot of shared information in how a beach responds to storms within a fairly narrow geographical area. hierarchical models help us leverage those commonalities, whilst respecting subtle and important differences. and doing so well help us avoid the worst of the demons that lurk in data driven modelling. \n",
+        "\n",
+        "\n",
+        "\n",
+        "# Reading list\n",
+        "\n",
+        "- [Bayesian workflow](https://betanalpha.github.io/assets/case_studies/principled_bayesian_workflow.html)"
+      ],
+      "id": "2f43f26d"
+    }
+  ],
+  "metadata": {
+    "kernelspec": {
+      "name": "python3",
+      "language": "python",
+      "display_name": "Python 3 (ipykernel)",
+      "path": "/Users/josh/miniconda3/envs/numpyro/share/jupyter/kernels/python3"
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 5
+}
