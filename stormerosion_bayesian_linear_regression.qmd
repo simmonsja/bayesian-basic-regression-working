@@ -18,8 +18,6 @@ execute:
 
 ## An ode to linear regressions
 
-XX STAN uses error scale not std dev. but mcleareath happily uses stddev throughout
-
 Good old fashioned, handful of parameters, linear regressions are great!
 
 Don't get me wrong I love fitting larger machine learning (ML) models and when you're after raw predictive power there's nothing better than finally getting that huge neural network singing. But in so many applications where you would employ data-driven models, linear regression models (and variations thereof) can hold their own in performance and often be better suited (more manageable, quicker, more interpretable) to the project as a whole. 
@@ -266,24 +264,20 @@ In a Bayesian framework we are not aiming to learn a single set of "true" parame
 
 There's no reason to get any more into frequentist vs Bayesian approaches, I only bring it up to highlight a key pivot to be made as most people default to frequentist approaches. Both are great, both are useful, both can quantify uncertainty even. But this is a post about Bayes and that'll be that.
 
-We call the description of probable values for our parameters the posterior distribution. To get to our posterior distribution we need three things:
+We call the description of probable values for our parameters the posterior distribution. To get to our posterior distribution we follow a process by which we:
 
-1. a model that includes a specified likelihood function
-2. prior distributions for each of our paramaters
-3. an algorithm to take samples from the posterior
-4. data
+1. Specify prior distributions for our parameters (where we think plausible values lie)
+2. Specify a likelihood function that helps us to assess how well the data match model outputs for a given set of parameter values
+3. Observe the data
+4. Use a sampling algorithm to get an updated estimate of plausible parameter values given the data and our model (posqterior distribution)
 
-We have #4, so let's tackle the first three.
+Well we have #3, so let's tackle the others.
 
 ## Likelihood
 
-The likelihood is a measure of how likely the data are given the model and a set of parameter values. The better fit to the data that a set of parameter values gives, the more we should believe that those values are plausible. Notice the little flip we did there, the Bayes rule helps us to navigate from the likelihood of the data given the parameters to what we will call our posterior distribution for the paramaters (describing probable values) given the data (XX review).
+The likelihood is a measure of how likely the data are given the model and a set of parameter values. The better fit to the data that a set of parameter values gives, the more we should believe that those paramater values are plausible. We've distilled things down a bit there, as our posterior distribution is influenced by both out prior and likelihood, but that's the intuition.
 
-XX
-- we need to fit the params ($\mu$ or the betas that make up $\mu$, and $\sigma$) based on how well they explain the data
-"What this means, recall, is that the machine considers every possible combination of the  parameter values. With a linear model, some of the parameters now stand for the strength  of association between the mean of the outcome, µ, and the value of some other variable.  For each combination of values, the machine computes the posterior probability, which is  a measure of relative plausibility, given the model and data. So the posterior distribution  ranks the infinite possible combinations of parameter values by their logical plausibility."
-
-Luckily for us, our assumptions about the form of the model/data generating process that we specified above give rise to a likelihood. 
+Luckily for us, our assumptions about the form of the model/data generating process that we specified above give rise to a likelihood. And even luckier for us, when we use typical software to fit our model, 
 
 XX WHAT is a PPL
 
