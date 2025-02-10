@@ -1,0 +1,2033 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.6.37">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>Fitting a Bayesian linear regression for storm response</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js" integrity="sha512-bLT0Qm9VnAYZDflyKcBaQ2gg0hSYNQrJ8RilYldYQ1FxQYoCLtUjuuRuZo+fjqhx/qtq/1itJ0C2ejDxltZVFg==" crossorigin="anonymous"></script><script src="stormerosion_bayesian_linear_regression_files/libs/clipboard/clipboard.min.js"></script>
+<script src="stormerosion_bayesian_linear_regression_files/libs/quarto-html/quarto.js"></script>
+<script src="stormerosion_bayesian_linear_regression_files/libs/quarto-html/popper.min.js"></script>
+<script src="stormerosion_bayesian_linear_regression_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="stormerosion_bayesian_linear_regression_files/libs/quarto-html/anchor.min.js"></script>
+<link href="stormerosion_bayesian_linear_regression_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="stormerosion_bayesian_linear_regression_files/libs/quarto-html/quarto-syntax-highlighting-29e2c20b02301cfff04dc8050bf30c7e.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="stormerosion_bayesian_linear_regression_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="stormerosion_bayesian_linear_regression_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="stormerosion_bayesian_linear_regression_files/libs/bootstrap/bootstrap-2b39cd06466044865ee8a2a34b00eba7.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script src="stormerosion_bayesian_linear_regression_files/libs/quarto-contrib/glightbox/glightbox.min.js"></script>
+<link href="stormerosion_bayesian_linear_regression_files/libs/quarto-contrib/glightbox/glightbox.min.css" rel="stylesheet">
+<link href="stormerosion_bayesian_linear_regression_files/libs/quarto-contrib/glightbox/lightbox.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" integrity="sha512-c3Nl8+7g4LMSTdrm621y7kf9v3SDPnhxLNhcjFJbKECVnmZHTdo+IRO05sNLTH/D3vA6u1X32ehoLC7WFVdheg==" crossorigin="anonymous"></script>
+
+<script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
+<script src="https://unpkg.com/@jupyter-widgets/html-manager@*/dist/embed-amd.js" crossorigin="anonymous"></script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN") {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+</head>
+
+<body>
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#setup" id="toc-setup" class="nav-link active" data-scroll-target="#setup"><span class="header-section-number">1</span> Setup</a>
+  <ul class="collapse">
+  <li><a href="#an-ode-to-linear-regressions" id="toc-an-ode-to-linear-regressions" class="nav-link" data-scroll-target="#an-ode-to-linear-regressions"><span class="header-section-number">1.1</span> An ode to linear regressions</a></li>
+  <li><a href="#what-this-is-and-what-this-is-not" id="toc-what-this-is-and-what-this-is-not" class="nav-link" data-scroll-target="#what-this-is-and-what-this-is-not"><span class="header-section-number">1.2</span> What this is and what this is not</a></li>
+  <li><a href="#the-task" id="toc-the-task" class="nav-link" data-scroll-target="#the-task"><span class="header-section-number">1.3</span> The task</a></li>
+  <li><a href="#the-data" id="toc-the-data" class="nav-link" data-scroll-target="#the-data"><span class="header-section-number">1.4</span> The data</a></li>
+  <li><a href="#the-model" id="toc-the-model" class="nav-link" data-scroll-target="#the-model"><span class="header-section-number">1.5</span> The model</a></li>
+  </ul></li>
+  <li><a href="#a-brief-aside-on-fitting-models" id="toc-a-brief-aside-on-fitting-models" class="nav-link" data-scroll-target="#a-brief-aside-on-fitting-models"><span class="header-section-number">2</span> A brief aside on fitting models</a>
+  <ul class="collapse">
+  <li><a href="#likelihood" id="toc-likelihood" class="nav-link" data-scroll-target="#likelihood"><span class="header-section-number">2.1</span> Likelihood</a></li>
+  <li><a href="#raising-a-model" id="toc-raising-a-model" class="nav-link" data-scroll-target="#raising-a-model"><span class="header-section-number">2.2</span> Raising a model</a></li>
+  <li><a href="#relax-and-let-the-machine-do-its-job" id="toc-relax-and-let-the-machine-do-its-job" class="nav-link" data-scroll-target="#relax-and-let-the-machine-do-its-job"><span class="header-section-number">2.3</span> Relax and let the machine do its job</a></li>
+  </ul></li>
+  <li><a href="#back-to-business" id="toc-back-to-business" class="nav-link" data-scroll-target="#back-to-business"><span class="header-section-number">3</span> Back to business</a>
+  <ul class="collapse">
+  <li><a href="#a-location-smoothie" id="toc-a-location-smoothie" class="nav-link" data-scroll-target="#a-location-smoothie"><span class="header-section-number">3.1</span> A location smoothie</a></li>
+  <li><a href="#a-dash-more-complexity" id="toc-a-dash-more-complexity" class="nav-link" data-scroll-target="#a-dash-more-complexity"><span class="header-section-number">3.2</span> A dash more complexity</a></li>
+  </ul></li>
+  <li><a href="#predicting-with-uncertainty" id="toc-predicting-with-uncertainty" class="nav-link" data-scroll-target="#predicting-with-uncertainty"><span class="header-section-number">4</span> Predicting with uncertainty</a></li>
+  <li><a href="#we-did-it" id="toc-we-did-it" class="nav-link" data-scroll-target="#we-did-it"><span class="header-section-number">5</span> We did it</a></li>
+  <li><a href="#reading-list" id="toc-reading-list" class="nav-link" data-scroll-target="#reading-list"><span class="header-section-number">6</span> Reading list</a></li>
+  </ul>
+</nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Fitting a Bayesian linear regression for storm response</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="setup" class="level1" data-number="1">
+<h1 data-number="1"><span class="header-section-number">1</span> Setup</h1>
+<section id="an-ode-to-linear-regressions" class="level2" data-number="1.1">
+<h2 data-number="1.1" class="anchored" data-anchor-id="an-ode-to-linear-regressions"><span class="header-section-number">1.1</span> An ode to linear regressions</h2>
+<p>Good old fashioned, handful of parameters, linear regressions are great!</p>
+<p>Don’t get me wrong I love fitting larger machine learning (ML) models and when you’re after raw predictive power there’s nothing better than finally getting that huge neural network singing. But in so many applications where you would employ data-driven models, linear regression models (and variations thereof) can hold their own in performance and often be better suited (more manageable, quicker, more interpretable) to the project as a whole.</p>
+<p>There’s something very endearing about being able to see all the parameters in your model. A tight knit group that you can call friends when you push that final project deliverable out the door. As ML models get larger, at best they’re are filled with acquaintances. More often you’re left anxiously gazing into the black-box abyss just hoping to recognise a friendly face.</p>
+<p>For a while now my default method for fitting linear regressions has been Bayesian. Sure uncertainty quantification is <span class="emoji" data-emoji="fire">🔥</span>, but really it’s the flexibility afforded by a Bayesian framework which lets you guide and extend on simple models to provide just the right level of complexity. Actually this post is a vehicle to a future post which will dive into this flexibility and show off some more interesting aspects (hint: it’ll be plenty hierarchical). But we have to get on the bus somewhere, and this is the stop closest to home. Plus I hope there’ll be some nice countryside out the window on the way.</p>
+</section>
+<section id="what-this-is-and-what-this-is-not" class="level2" data-number="1.2">
+<h2 data-number="1.2" class="anchored" data-anchor-id="what-this-is-and-what-this-is-not"><span class="header-section-number">1.2</span> What this is and what this is not</h2>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+IS
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>A very practical implementation based introduction to Bayesian methods. A, hopefully, relatable hook into a deeper subject.</p>
+</div>
+</div>
+<div class="callout callout-style-default callout-important callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+IS NOT
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>A comprehensive guide to the theory or practice of Bayesian methods. I’ll try refer to other books where more details are needed.</p>
+</div>
+</div>
+</section>
+<section id="the-task" class="level2" data-number="1.3">
+<h2 data-number="1.3" class="anchored" data-anchor-id="the-task"><span class="header-section-number">1.3</span> The task</h2>
+<p>We are going to use a great, openly available dataset that describes sandy beach response to offshore storms (as measured by shoreline change). This comes from the excellent paper:</p>
+<p>Data-driven modelling of coastal storm erosion for real-time forecasting at a wave-dominated embayed beach (Ibaceta and Harley, 2024) <a href="https://doi.org/10.1016/j.coastaleng.2024.104596">https://doi.org/10.1016/j.coastaleng.2024.104596</a></p>
+<p>In this paper, the authors fit a really nice linear regression to model the storm response. We show here how an equivalent model could be fit with Bayesian methods to show this alternative appraoch and its concepts.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-3-contents" aria-controls="callout-3" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Note
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-3" class="callout-3-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>This is not in any way meant to be knock on the use of a frequentist approach in the above paper. I’ll show some of the differences as we go along of course, but the true power of applying Bayesian methods only comes when fitting more complex models which we will see in the next post. I use this paper as the data are freely available, the model is already prepared and has been carefully thought about, and it was an excellent (and clear/well-written) use of data-driven modelling to explore storm erosion!</p>
+</div>
+</div>
+</div>
+<p>Anyway I hear you, “pipe down and show me some data”.</p>
+</section>
+<section id="the-data" class="level2" data-number="1.4">
+<h2 data-number="1.4" class="anchored" data-anchor-id="the-data"><span class="header-section-number">1.4</span> The data</h2>
+<p>We load the data directly from the authors’ github repo (thanks again!). As per the paper, we will attempt to model the change in shoreline position at a given location (<code>dW</code>) with the following predictor variables (which I may interchangeably call covariates, you’ve been warned):</p>
+<ul>
+<li><code>Wpre</code>: The shoreline position before the storm</li>
+<li><code>Eocum</code>: cumulative offshore wave energy during the storm (proportional to significant wave height squared)</li>
+<li><code>WLres</code>: residual of measured water level to astronomical tide</li>
+<li><code>Tpeak</code>: peak offshore wave period during the storm</li>
+<li><code>Dpo</code>: average wave direction during the storm</li>
+</ul>
+<p>The raw data:</p>
+<div id="8406ff71" class="cell" data-execution_count="3">
+<div class="cell-output cell-output-display">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">Onset</th>
+<th data-quarto-table-cell-role="th">End</th>
+<th data-quarto-table-cell-role="th">timezone</th>
+<th data-quarto-table-cell-role="th">Eocum</th>
+<th data-quarto-table-cell-role="th">Dpo</th>
+<th data-quarto-table-cell-role="th">Tpeak</th>
+<th data-quarto-table-cell-role="th">WLres</th>
+<th data-quarto-table-cell-role="th">Wpre_exposed</th>
+<th data-quarto-table-cell-role="th">Wpre_partially</th>
+<th data-quarto-table-cell-role="th">Wpre_sheltered</th>
+<th data-quarto-table-cell-role="th">dW_exposed</th>
+<th data-quarto-table-cell-role="th">dW_partially</th>
+<th data-quarto-table-cell-role="th">dW_sheltered</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">90</td>
+<td>31/10/1998 19:00</td>
+<td>3/11/1998 3:00</td>
+<td>AEST</td>
+<td>426251.85140</td>
+<td>154.431507</td>
+<td>12.50</td>
+<td>0.090107</td>
+<td>NaN</td>
+<td>NaN</td>
+<td>NaN</td>
+<td>NaN</td>
+<td>NaN</td>
+<td>NaN</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">91</td>
+<td>18/11/1998 5:00</td>
+<td>19/11/1998 7:00</td>
+<td>AEST</td>
+<td>189300.07370</td>
+<td>141.759592</td>
+<td>10.00</td>
+<td>-0.049956</td>
+<td>NaN</td>
+<td>NaN</td>
+<td>NaN</td>
+<td>NaN</td>
+<td>NaN</td>
+<td>NaN</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">92</td>
+<td>5/02/1999 11:00</td>
+<td>5/02/1999 21:00</td>
+<td>AEST</td>
+<td>56780.11139</td>
+<td>72.999917</td>
+<td>13.33</td>
+<td>-0.135135</td>
+<td>65.97566</td>
+<td>43.044657</td>
+<td>36.475053</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">93</td>
+<td>8/02/1999 8:00</td>
+<td>9/02/1999 4:00</td>
+<td>AEST</td>
+<td>140559.89880</td>
+<td>131.355356</td>
+<td>10.20</td>
+<td>-0.015254</td>
+<td>65.97566</td>
+<td>43.044657</td>
+<td>36.475053</td>
+<td>NaN</td>
+<td>NaN</td>
+<td>NaN</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">94</td>
+<td>22/03/1999 23:00</td>
+<td>23/03/1999 6:00</td>
+<td>AEST</td>
+<td>40664.83559</td>
+<td>158.372335</td>
+<td>10.20</td>
+<td>-0.084564</td>
+<td>NaN</td>
+<td>NaN</td>
+<td>NaN</td>
+<td>NaN</td>
+<td>NaN</td>
+<td>NaN</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+<p>There’s a bit of data wrangling to get us to the fit-ready format you’ll see below. If you wish to see the code I’ve hacked together to get us into a better format for the Bayesian modelling, then feel free to look below. But I wont subject the reader to this by default.</p>
+<div class="callout callout-style-simple callout-note no-icon callout-titled" title="Show me the code">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-4-contents" aria-controls="callout-4" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Show me the code
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-4" class="callout-4-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>Alright you sick puppy, welcome to the data wrangling.</p>
+<div id="f4066015" class="cell" data-execution_count="4">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Define the variables we are interested in</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>cases <span class="op">=</span> [ <span class="st">"dW_exposed"</span>, <span class="st">"dW_partially"</span>, <span class="st">"dW_sheltered"</span>]</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"># our covariates and Onset as a sanity check</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>id_vars <span class="op">=</span> [<span class="st">"Onset"</span>, <span class="st">"Eocum"</span>, <span class="st">"WLres"</span>, <span class="st">"Tpeak"</span>, <span class="st">"Dpo"</span>]</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>pre_vars <span class="op">=</span> [<span class="st">"Wpre</span><span class="sc">{}</span><span class="st">"</span>.<span class="bu">format</span>(_[<span class="dv">2</span>:]) <span class="cf">for</span> _ <span class="kw">in</span> cases]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>We are going to make a little format adjustment just to make filtering between locations easier. in this dataset there are three separate locations at which shoreline change was measured at Narrabeen (named here as “exposed”, “partially” and “sheltered”). These are provided as columns in the original data, and here we rework the dataframe to have only a single target variable (<code>dW</code>) and convert locations into a column as a categorical variable.</p>
+<div id="c1c6fa18" class="cell" data-execution_count="5">
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># rework the dataframe</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="co"># take only the columns we need</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span>  raw_data.copy()[id_vars<span class="op">+</span>pre_vars<span class="op">+</span>cases]</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co"># convert Onset to datetime</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>df[<span class="st">"Onset"</span>] <span class="op">=</span> pd.to_datetime(df[<span class="st">"Onset"</span>], dayfirst<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="co"># we will convert 3 columns into 2 (category and value) by melting, melting - oh what a world</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> pd.melt(df, id_vars <span class="op">=</span> id_vars <span class="op">+</span> pre_vars, var_name<span class="op">=</span><span class="st">"location"</span>, value_name<span class="op">=</span><span class="st">"dW"</span>).reset_index(drop<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co"># we"re going similarly grab the correct prestorm beach position based on the category, the lazy way</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> ii <span class="kw">in</span> np.arange(df.shape[<span class="dv">0</span>]):</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    df.loc[ii,<span class="st">"Wpre"</span>] <span class="op">=</span> df.loc[ii,<span class="st">"Wpre</span><span class="sc">{}</span><span class="st">"</span>.<span class="bu">format</span>(df.loc[ii,<span class="st">"location"</span>][<span class="dv">2</span>:])] </span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="co"># drop the now obsolete Wpre columns</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> df.drop(columns<span class="op">=</span>pre_vars)</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="co"># lets just remove all the unnecessary dW_ in the variable column</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>df[<span class="st">"location"</span>] <span class="op">=</span> df[<span class="st">"location"</span>].<span class="bu">str</span>.replace(<span class="st">"dW_"</span>,<span class="st">""</span>)</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>df.sort_values(by<span class="op">=</span>[<span class="st">"Onset"</span>,<span class="st">"location"</span>], inplace<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a><span class="co"># and lets get rid of any NaNs</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span>  df.dropna().reset_index(drop<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>display(df.head())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">Onset</th>
+<th data-quarto-table-cell-role="th">Eocum</th>
+<th data-quarto-table-cell-role="th">WLres</th>
+<th data-quarto-table-cell-role="th">Tpeak</th>
+<th data-quarto-table-cell-role="th">Dpo</th>
+<th data-quarto-table-cell-role="th">location</th>
+<th data-quarto-table-cell-role="th">dW</th>
+<th data-quarto-table-cell-role="th">Wpre</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">0</td>
+<td>1999-02-05 11:00:00</td>
+<td>56780.11139</td>
+<td>-0.135135</td>
+<td>13.33</td>
+<td>72.999917</td>
+<td>exposed</td>
+<td>0.0</td>
+<td>65.975660</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">1</td>
+<td>1999-02-05 11:00:00</td>
+<td>56780.11139</td>
+<td>-0.135135</td>
+<td>13.33</td>
+<td>72.999917</td>
+<td>partially</td>
+<td>0.0</td>
+<td>43.044657</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">2</td>
+<td>1999-02-05 11:00:00</td>
+<td>56780.11139</td>
+<td>-0.135135</td>
+<td>13.33</td>
+<td>72.999917</td>
+<td>sheltered</td>
+<td>0.0</td>
+<td>36.475053</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">3</td>
+<td>2003-08-10 02:00:00</td>
+<td>135390.98440</td>
+<td>0.032955</td>
+<td>12.20</td>
+<td>169.821682</td>
+<td>exposed</td>
+<td>0.0</td>
+<td>43.741044</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">4</td>
+<td>2003-08-10 02:00:00</td>
+<td>135390.98440</td>
+<td>0.032955</td>
+<td>12.20</td>
+<td>169.821682</td>
+<td>partially</td>
+<td>0.0</td>
+<td>45.474564</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+<p>You should be able to see (e.g., from thhe Wpre column) the 1999-02-05 storm (row 92) correctly flowing from <code>raw_data</code> through to <code>df</code> below (rows 0 - 2, i.e., three total as there are three locations).</p>
+<p>We should take this time to scale our covariates, as the authors did too. Of course we could skip this step but you can see that e.g., <code>Eocum</code> is orders of magnitude higher than <code>WLres</code>. Leaving the data in this state would make it really hard to interpret the coefficients of our model relative to each other for a start. Secondly, model fitting relies on gradients, and these can get whacky if your variables range over orders of magnitude. Be kind. Show your model some TLC and it’ll make your life easier in return (<a href="https://mc-stan.org/docs/stan-users-guide/efficiency-tuning.html#standardizing-predictors">and if you dont believe me…</a>).</p>
+<div id="aee80f93" class="cell" data-execution_count="6">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># find the max and min of each column - will will normalise as the authors did, by the location</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>scale_max_vals <span class="op">=</span> df.groupby(<span class="st">"location"</span>).<span class="bu">max</span>()</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>scale_min_vals <span class="op">=</span> df.groupby(<span class="st">"location"</span>).<span class="bu">min</span>()</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co"># finally, we normalise each covariate to be between 0 and 1 based on location</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> col <span class="kw">in</span> df.columns.drop([<span class="st">"Onset"</span>, <span class="st">"location"</span>]):</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="co"># add the location specific values as temporary columns</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    df[<span class="st">"scale_max"</span>] <span class="op">=</span> df[<span class="st">"location"</span>].<span class="bu">map</span>(scale_max_vals[col])</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    df[<span class="st">"scale_min"</span>] <span class="op">=</span> df[<span class="st">"location"</span>].<span class="bu">map</span>(scale_min_vals[col])</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># scale the variable</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    df[col] <span class="op">=</span> (df[col] <span class="op">-</span> df[<span class="st">"scale_min"</span>]) <span class="op">/</span> (df[<span class="st">"scale_max"</span>] <span class="op">-</span> df[<span class="st">"scale_min"</span>])</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="co"># hide the evidence</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    df <span class="op">=</span> df.drop(columns<span class="op">=</span>[<span class="st">"scale_max"</span>, <span class="st">"scale_min"</span>])</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</div>
+</div>
+</div>
+<p>A few moments later… we have our data scaled and in the format we want:</p>
+<div id="b4d91d74" class="cell" data-execution_count="7">
+<div class="cell-output cell-output-display">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">Onset</th>
+<th data-quarto-table-cell-role="th">Eocum</th>
+<th data-quarto-table-cell-role="th">WLres</th>
+<th data-quarto-table-cell-role="th">Tpeak</th>
+<th data-quarto-table-cell-role="th">Dpo</th>
+<th data-quarto-table-cell-role="th">location</th>
+<th data-quarto-table-cell-role="th">dW</th>
+<th data-quarto-table-cell-role="th">Wpre</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">0</td>
+<td>1999-02-05 11:00:00</td>
+<td>0.013590</td>
+<td>0.000000</td>
+<td>0.620448</td>
+<td>0.087123</td>
+<td>exposed</td>
+<td>0.241472</td>
+<td>0.650606</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">1</td>
+<td>1999-02-05 11:00:00</td>
+<td>0.013099</td>
+<td>0.000000</td>
+<td>0.518735</td>
+<td>0.037655</td>
+<td>partially</td>
+<td>0.131938</td>
+<td>0.309427</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">2</td>
+<td>1999-02-05 11:00:00</td>
+<td>0.013099</td>
+<td>0.000000</td>
+<td>0.518735</td>
+<td>0.037655</td>
+<td>sheltered</td>
+<td>0.212869</td>
+<td>0.343740</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">3</td>
+<td>2003-08-10 02:00:00</td>
+<td>0.064453</td>
+<td>0.256852</td>
+<td>0.462185</td>
+<td>0.836539</td>
+<td>exposed</td>
+<td>0.241472</td>
+<td>0.289884</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">4</td>
+<td>2003-08-10 02:00:00</td>
+<td>0.063987</td>
+<td>0.283809</td>
+<td>0.386417</td>
+<td>0.827681</td>
+<td>partially</td>
+<td>0.131938</td>
+<td>0.349153</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+<p>The only conceptually important part of this wrangling was the shift to having the location as a categorical column. Instead of having seperate (e.g.,) <code>dW</code> columns for each location, we have a single target variable <code>dW</code> and a <code>location</code> column that tells us which location the data point is from (so we will now have multiple rows for the same storm event). I am signalling here our modelling intent which you will see come into play below and will put us in the right data frame of mind for more complex modelling.</p>
+</section>
+<section id="the-model" class="level2" data-number="1.5">
+<h2 data-number="1.5" class="anchored" data-anchor-id="the-model"><span class="header-section-number">1.5</span> The model</h2>
+<p>In the sections below we will focus on the basics of implementing a Bayesian regression. We’re limited, of course, by the amount of words that I can responsibly subject you to. So for anyone wanting a comprehensive resource that introduces linear regression from the very basics - <a href="https://users.aalto.fi/~ave/ROS.pdf">Regression and Other Stories by Gelman, Hill and Vehtari</a>.</p>
+<p>To the model. Again, we are not thinking much about coastal processes here. Luckily, the authors have done the hard work and we just get to sit back and crunch numbers 😎. So we follow the model provided in the paper:</p>
+<p><span class="math display">\[\Delta W = \beta_0 + \beta_1 E_{o,cum} + \beta_2 W_{pre} + \beta_3 D_{po} + \beta_4 T_{p,peak} + \beta_5 WL_{res} + \epsilon\]</span></p>
+<p>We have a model that predicts the change in shoreline (<span class="math inline">\(\Delta W\)</span>) from the additive combination of our five variables (along with an intecept term <span class="math inline">\(\beta_0\)</span>).</p>
+<p>To help us intuit the Bayesian approach to fitting, lets simplify our model. We label our five variables plus intercept collectively as <span class="math inline">\(\mathbf{X}\)</span>. The corresponding coefficients that we must fit for each we label collectively as <span class="math inline">\(\mathbf{\beta}\)</span> (see <a href="https://en.wikipedia.org/wiki/Linear_regression#Formulation">the here if this notation is unfamiliar</a>).</p>
+<p>We can condense our model to:</p>
+<p><span class="math display">\[
+\Delta W = \mathbf{X} \mathbf{\beta} + \epsilon
+\]</span></p>
+<p>But we musn’t forget to discuss the little red caboose languishing at the end, <span class="math inline">\(\epsilon\)</span>. Sometimes it doesn’t get the attention of the cars up front, but it’s a vital part of the train in any gradient ascent. One way to parse the above would be:</p>
+<ul>
+<li><span class="math inline">\(\mathbf{X} \mathbf{\beta}\)</span> describes our model estimating the mean values of <span class="math inline">\(\Delta W\)</span></li>
+<li><span class="math inline">\(\epsilon\)</span> describes the residuals or errors of our model when considering our data</li>
+</ul>
+<p>In this case we are going to <em>assume</em> that our residuals are normally distributed with a standard deviation of <span class="math inline">\(\sigma\)</span> and centered around zero (<span class="math inline">\(\mathcal{N}(0, \sigma)\)</span>). Why? This is a good start and a common assumption. Lot of things in nature are gaussian. Plus thinking about the alternatives too hard would lead us into the scary world of generalised linear models, and that’s not for us today.</p>
+<p>Okay so putting words into notation:</p>
+<p><span class="math display">\[
+\Delta W = \mathbf{X} \mathbf{\beta} + \epsilon \qquad \epsilon \sim \mathcal{N}(0, \sigma)
+\]</span></p>
+<p>We could also frame this in another way that is perhaps more Bayesian and will align better with our code below. We could say that our observed values of <span class="math inline">\(\Delta W\)</span> are generated from a normal distribution with mean <span class="math inline">\(\mathbf{X} \mathbf{\beta}\)</span> and standard deviation <span class="math inline">\(\sigma\)</span>. Same emperor, new clothes. <span class="math inline">\(\sigma\)</span> then becomes another parameter we will learn from the data.</p>
+<p><span class="math display">\[
+\Delta W \sim \mathcal{N}(\mathbf{X} \mathbf{\beta}, \sigma)
+\]</span></p>
+</section>
+</section>
+<section id="a-brief-aside-on-fitting-models" class="level1" data-number="2">
+<h1 data-number="2"><span class="header-section-number">2</span> A brief aside on fitting models</h1>
+<p>Right… how the heck does this help us to fit a model? What does fitting even mean in a Bayesian framework? Feel free to skip on to Section 3 if you’re just wanting to follow the example without an unexpected journey into model fitting.</p>
+<p>In a Bayesian framework we are not aiming to learn a single set of “true” parameter values for our <span class="math inline">\(\beta\)</span>’s and <span class="math inline">\(\sigma\)</span>. That would be so very frequentist, and so instead we treat parameters as being probabilistic. It only makes sense to talk about how probable different values are for the parameters and the range of values that are plausible for our model and data. Maybe there’s a single true value to be found. Theoretically if we had the perfect model and infinite data… yeah no, that’s never going happen when modelling an environment system 🥲.</p>
+<p>There’s no reason to get any more into frequentist vs Bayesian approaches, I only bring it up to highlight a key pivot to be made as most people default to frequentist approaches. Both are great, both are useful, both can quantify uncertainty even. But this is a post about Bayes and that’ll be that.</p>
+<p>We call the description of probable values for our parameters the posterior distribution. To get to our posterior distribution we follow a process by which we:</p>
+<ol type="1">
+<li>Specify prior distributions for our parameters (where we think plausible values lie)</li>
+<li>Specify a likelihood function that helps us to assess how well the data match model outputs for a given set of parameter values</li>
+<li>Observe the data</li>
+<li>Use a sampling algorithm to get an updated estimate of plausible parameter values given the data and our model (posqterior distribution)</li>
+</ol>
+<p>Well we have #3, so let’s tackle the others.</p>
+<section id="likelihood" class="level2" data-number="2.1">
+<h2 data-number="2.1" class="anchored" data-anchor-id="likelihood"><span class="header-section-number">2.1</span> Likelihood</h2>
+<p>The likelihood is a measure of how likely the data are given the model and a set of parameter values. The better fit to the data that a set of parameter values gives, the more we should believe that those paramater values are plausible. We’ve distilled things down a bit there, as our posterior distribution is influenced by both out prior and likelihood, but that’s the intuition.</p>
+<p>Luckily for us, our assumptions about the form of the model/data generating process that we specified above gives rise to a likelihood. And even luckier for us, when we use modern software to specify and fit our model, we can get it without even breaking a sweat. We will use Probabilistic Programming Languages (PPLs) of which there are many options including <a href="https://num.pyro.ai/en/latest/index.html"><code>NumPyro</code></a>, <a href="https://mc-stan.org"><code>Stan</code></a> and <a href="https://www.pymc.io/welcome.html"><code>PyMC</code></a>. PPLs provide a way to specify Bayesian models and algorithms to fit them.</p>
+<p>We’re going to look at how this works in a code example below (using <code>NumPyro</code>) which will hopfully help to illuminate this. I am going to generate some synthetic data that relates a variable <code>X</code> to target <code>y</code> with a simple linear relationship plus guassian noise (<code>np.random.randn</code>).</p>
+<div id="80803a29" class="cell" data-execution_count="9">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># make dummy data for X, then generate y data using:</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="co"># y = 0.1 X + 0.2 + N(0, 0.1)</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> np.random.randn(<span class="dv">100</span>)</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> <span class="fl">0.1</span> <span class="op">*</span> X <span class="op">+</span> <span class="fl">0.2</span> <span class="op">+</span> <span class="fl">0.1</span> <span class="op">*</span> np.random.randn(<span class="dv">100</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>We can specify a linear regression model: <span class="math display">\[y = \mathcal{N}\left(\beta_0 + \beta_1 x, \sigma\right)\]</span> using a PPL and then fit values for <span class="math inline">\(\beta_0\)</span> and <span class="math inline">\(\beta_1\)</span> (and <span class="math inline">\(\sigma\)</span>). Given some propsed values for the parameters, <code>NumPyro</code> will tell us the log-likelihood for these values given the model and the data. Sweet.</p>
+<div class="callout callout-style-simple callout-note no-icon callout-titled" title="Show me the code">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-5-contents" aria-controls="callout-5" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Show me the code
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-5" class="callout-5-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div id="631f5499" class="cell" data-execution_count="10">
+<div class="sourceCode cell-code" id="annotated-cell-10"><pre class="sourceCode python code-annotation-code code-with-copy code-annotated"><code class="sourceCode python"><span id="annotated-cell-10-1"><a href="#annotated-cell-10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># build a simple model for this in NumPyro</span></span>
+<span id="annotated-cell-10-2"><a href="#annotated-cell-10-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> model(X, y<span class="op">=</span><span class="va">None</span>):</span>
+<span id="annotated-cell-10-3"><a href="#annotated-cell-10-3" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Define priors</span></span>
+<a class="code-annotation-anchor" data-target-cell="annotated-cell-10" data-target-annotation="1" onclick="event.preventDefault();" href="">1</a><span id="annotated-cell-10-4" class="code-annotation-target"><a href="#annotated-cell-10-4" aria-hidden="true" tabindex="-1"></a>    beta_0 <span class="op">=</span> numpyro.sample(<span class="st">"beta_0"</span>, dist.Normal(<span class="dv">0</span>, <span class="dv">1</span>))</span>
+<span id="annotated-cell-10-5"><a href="#annotated-cell-10-5" aria-hidden="true" tabindex="-1"></a>    beta_1 <span class="op">=</span> numpyro.sample(<span class="st">"beta_1"</span>, dist.Normal(<span class="dv">0</span>, <span class="dv">1</span>))</span>
+<span id="annotated-cell-10-6"><a href="#annotated-cell-10-6" aria-hidden="true" tabindex="-1"></a>    sigma <span class="op">=</span> numpyro.sample(<span class="st">"sigma"</span>, dist.Exponential(<span class="dv">1</span>))</span>
+<span id="annotated-cell-10-7"><a href="#annotated-cell-10-7" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Define the model</span></span>
+<a class="code-annotation-anchor" data-target-cell="annotated-cell-10" data-target-annotation="2" onclick="event.preventDefault();" href="">2</a><span id="annotated-cell-10-8" class="code-annotation-target"><a href="#annotated-cell-10-8" aria-hidden="true" tabindex="-1"></a>    mu <span class="op">=</span> beta_0 <span class="op">+</span> beta_1 <span class="op">*</span> X</span>
+<span id="annotated-cell-10-9"><a href="#annotated-cell-10-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># store the model prediction before we account for the error</span></span>
+<span id="annotated-cell-10-10"><a href="#annotated-cell-10-10" aria-hidden="true" tabindex="-1"></a>    numpyro.deterministic(<span class="st">"mu"</span>, mu)</span>
+<span id="annotated-cell-10-11"><a href="#annotated-cell-10-11" aria-hidden="true" tabindex="-1"></a>    <span class="co"># and then finally sample so we can compare to our observations</span></span>
+<a class="code-annotation-anchor" data-target-cell="annotated-cell-10" data-target-annotation="3" onclick="event.preventDefault();" href="">3</a><span id="annotated-cell-10-12" class="code-annotation-target"><a href="#annotated-cell-10-12" aria-hidden="true" tabindex="-1"></a>    numpyro.sample(<span class="st">"y_out"</span>, dist.Normal(mu, sigma), obs<span class="op">=</span>y)</span><div class="code-annotation-gutter-bg"></div><div class="code-annotation-gutter"></div></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-annotation">
+<dl class="code-annotation-container-grid">
+<dt data-target-cell="annotated-cell-10" data-target-annotation="1">1</dt>
+<dd>
+<span data-code-cell="annotated-cell-10" data-code-lines="4,5,6" data-code-annotation="1">The first few lines define the prior distrbituions for the parameters in our model - explained in Section 2.2 below.</span>
+</dd>
+<dt data-target-cell="annotated-cell-10" data-target-annotation="2">2</dt>
+<dd>
+<span data-code-cell="annotated-cell-10" data-code-lines="8,9,10" data-code-annotation="2">We define the model as a linear regression with an intercept (<code>beta_0</code>) and a slope (<code>beta_1</code>). <code>mu</code> (<span class="math inline">\(\mu\)</span>) stores the mean of this model as we defined above i.e., <span class="math inline">\(\mu = \mathbf{X}\mathbf{\beta}\)</span>.</span>
+</dd>
+<dt data-target-cell="annotated-cell-10" data-target-annotation="3">3</dt>
+<dd>
+<span data-code-cell="annotated-cell-10" data-code-lines="12" data-code-annotation="3">Finally we tell the model how we think the residuals are distributed about <span class="math inline">\(\mu\)</span>. This line is a direct translation of our equation from above <span class="math inline">\(y \sim \mathcal{N}(\mathbf{X} \mathbf{\beta}, \sigma)\)</span>.</span>
+</dd>
+</dl>
+</div>
+</div>
+<div id="ae34be34" class="cell" data-execution_count="11">
+<details class="code-fold">
+<summary>Log-likelihood code</summary>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># generate 10 possible solutions</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>proposed_values <span class="op">=</span> {</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">"beta_0"</span> : np.array([<span class="fl">0.2</span>, <span class="fl">0.1</span>, <span class="fl">0.05</span>, <span class="fl">0.19</span>, <span class="fl">0.21</span>, <span class="fl">0.4</span>, <span class="fl">0.45</span>, <span class="fl">0.25</span>, <span class="fl">0.05</span>, <span class="fl">0.2</span>]),</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"beta_1"</span> : np.array([<span class="fl">0.1</span>, <span class="fl">0.2</span>, <span class="fl">0.05</span>, <span class="fl">0.11</span>, <span class="fl">0.09</span>, <span class="dv">0</span>, <span class="op">-</span><span class="fl">0.1</span>, <span class="fl">0.15</span>, <span class="fl">0.2</span>, <span class="fl">0.3</span>]),</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">"sigma"</span> : np.array([<span class="fl">0.1</span>, <span class="fl">0.1</span>, <span class="fl">0.1</span>, <span class="fl">0.1</span>, <span class="fl">0.1</span>, <span class="fl">0.1</span>, <span class="fl">0.1</span>, <span class="fl">0.1</span>, <span class="fl">0.1</span>, <span class="fl">0.1</span>])</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="co"># get the log likihood</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>loglik <span class="op">=</span> numpyro.infer.util.log_likelihood(</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    model <span class="op">=</span> model, </span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    posterior_samples <span class="op">=</span> proposed_values,</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    X <span class="op">=</span> X, </span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    y <span class="op">=</span> y</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+</div>
+</div>
+</div>
+<p>You can see below that fits (i.e., values for our parameters) that lie closer to our true model parameters (<span class="math inline">\(0.1 * x + 0.2\)</span>) have higher log-likelihoods. As we would expect right, they fit the data better. So there we have it, a method for assessing goodness of fit, we’re well on our way to a posterior. And much of the hard work done for us, goodee.</p>
+<div id="4ff9615b" class="cell" data-execution_count="12">
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="stormerosion_bayesian_linear_regression_files/figure-html/cell-12-output-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-1"><img src="stormerosion_bayesian_linear_regression_files/figure-html/cell-12-output-1.png" width="461" height="324" class="figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-6-contents" aria-controls="callout-6" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Note
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-6" class="callout-6-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>For the graph above: the higher the likelihood the better (hence why you may have heard of maximum likelihood estimation).</p>
+</div>
+</div>
+</div>
+</section>
+<section id="raising-a-model" class="level2" data-number="2.2">
+<h2 data-number="2.2" class="anchored" data-anchor-id="raising-a-model"><span class="header-section-number">2.2</span> Raising a model</h2>
+<p>We are going to talk more about prior distributions below. For now all we need to know is that the model needs us to work hand in hand with it. A Bayesian approach is guiding the model, supporting it and empowering it to achieve a good fit. Infinity is an frighteningly large search space, and without some guidance we are sending our model out in the big wide world all alone. We use prior knowledge to define some reasonable space in which we expect to find plausible values for our parameters.</p>
+<p>The aim is to give the model a nice wide field to explore but not have it wander off a numerical cliff. In environmental science its fairly easy to define what’s silly. For example, can a shoreline erode 100,000 m during a single storm event? If it could we’d be in strife so we can pretty safely give very little probability to parameter values that produce such outlandish numbers. We use prior distributions to impart this belief on the model, leaving it then do its own exploration with this information, the data, and the likelihood function.</p>
+</section>
+<section id="relax-and-let-the-machine-do-its-job" class="level2" data-number="2.3">
+<h2 data-number="2.3" class="anchored" data-anchor-id="relax-and-let-the-machine-do-its-job"><span class="header-section-number">2.3</span> Relax and let the machine do its job</h2>
+<p>Our machine for obtaining samples to build a picture of the posterior distribution for our parameters is going to be Markov Chain Monte Carlo (MCMC). For a great introduction to MCMC please go explore many better sources than I, for example <a href="https://youtu.be/rZk2FqX2XnY?si=UpGAmJ3LEGXtGSz-&amp;t=610">this lecture</a> from Richard McElreath’s great Statistical Rethinking course.</p>
+<p>For our purposes and for the rest of this blog we are going to treat the process of obtaining the posterior distribution as a magic. We first specify the data generating process with our model. Then the python implementation of the sampling fairy floats down from the clouds, pries open the chassis of my laptop and greedily feeds on the power being fed to my CPU for a period of seconds to minutes. The gorged fairy, now satiated, waves its magic wand and voilà! Samples from the posterior distribution are delivered into memory, rendered into figures, and subsequently delivered express to our eyeballs.</p>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-7-contents" aria-controls="callout-7" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Tip
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-7" class="callout-7-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>The blood of the CPU will keep you alive, even if you’re an inch from death, but at a terrible price…</p>
+</div>
+</div>
+</div>
+<p>Of course, I should mention that we pay the flashy uncertainty bands et al.&nbsp;of a Bayesian fit with a (mostly very modest) computational cost. Sometimes this cost can sneak up on you for more complex models, but for a lot of problems in the environmental space the time difference is small/manageable on modern compute. I’ve skimmed through enough articles to know attention spans are shorter than ever, or something to that effect, but surely we can spare a extra seconds to give our model a glow up.</p>
+</section>
+</section>
+<section id="back-to-business" class="level1" data-number="3">
+<h1 data-number="3"><span class="header-section-number">3</span> Back to business</h1>
+<section id="a-location-smoothie" class="level2" data-number="3.1">
+<h2 data-number="3.1" class="anchored" data-anchor-id="a-location-smoothie"><span class="header-section-number">3.1</span> A location smoothie</h2>
+<p>Now what we maybe have a little bit more of an intuition about how we fit the model in Bayes and get the elusive posterior distribution, let’s turn back to our original example. We’re going to look at how to mix the ingredients ready for sampling using the <a href="https://bambinos.github.io/bambi/"><code>Bambi</code> package</a>. <code>Bambi</code> relies on the <code>PyMC</code> package as the underlying PPL to construct the model and sample from the posterior distribution.</p>
+<p>For <code>Bambi</code> to work its magic, we need to supply it with a structure for the model that that:</p>
+<ul>
+<li>describes the parameters in our model and specifies prior distributions for each (though <code>Bambi</code> will adopt some default priors if you’re lazy)</li>
+<li>specifies the model that, given the data and the parameters, estimates the target (y)</li>
+</ul>
+<div id="5b40d863" class="cell" data-execution_count="13">
+<div class="sourceCode cell-code" id="annotated-cell-2"><pre class="sourceCode python code-annotation-code code-with-copy code-annotated"><code class="sourceCode python"><span id="annotated-cell-2-1"><a href="#annotated-cell-2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># define our model</span></span>
+<span id="annotated-cell-2-2"><a href="#annotated-cell-2-2" aria-hidden="true" tabindex="-1"></a>mod_smoothie <span class="op">=</span> bmb.Model(</span>
+<a class="code-annotation-anchor" data-target-cell="annotated-cell-2" data-target-annotation="1" onclick="event.preventDefault();" href="">1</a><span id="annotated-cell-2-3" class="code-annotation-target"><a href="#annotated-cell-2-3" aria-hidden="true" tabindex="-1"></a>        formula <span class="op">=</span> <span class="st">"dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres"</span>,</span>
+<a class="code-annotation-anchor" data-target-cell="annotated-cell-2" data-target-annotation="2" onclick="event.preventDefault();" href="">2</a><span id="annotated-cell-2-4" class="code-annotation-target"><a href="#annotated-cell-2-4" aria-hidden="true" tabindex="-1"></a>        data <span class="op">=</span> df,</span>
+<a class="code-annotation-anchor" data-target-cell="annotated-cell-2" data-target-annotation="3" onclick="event.preventDefault();" href="">3</a><span id="annotated-cell-2-5" class="code-annotation-target"><a href="#annotated-cell-2-5" aria-hidden="true" tabindex="-1"></a>        priors <span class="op">=</span> {</span>
+<span id="annotated-cell-2-6"><a href="#annotated-cell-2-6" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Intercept"</span>: bmb.Prior(<span class="st">"Normal"</span>, mu <span class="op">=</span> <span class="dv">0</span>, sigma <span class="op">=</span> <span class="dv">1</span>),</span>
+<span id="annotated-cell-2-7"><a href="#annotated-cell-2-7" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Eocum"</span>: bmb.Prior(<span class="st">"Normal"</span>, mu <span class="op">=</span> <span class="dv">0</span>, sigma <span class="op">=</span> <span class="dv">1</span>),</span>
+<span id="annotated-cell-2-8"><a href="#annotated-cell-2-8" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Wpre"</span>: bmb.Prior(<span class="st">"Normal"</span>, mu <span class="op">=</span> <span class="dv">0</span>, sigma <span class="op">=</span> <span class="dv">1</span>),</span>
+<span id="annotated-cell-2-9"><a href="#annotated-cell-2-9" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Dpo"</span>: bmb.Prior(<span class="st">"Normal"</span>, mu <span class="op">=</span> <span class="dv">0</span>, sigma <span class="op">=</span> <span class="dv">1</span>),</span>
+<span id="annotated-cell-2-10"><a href="#annotated-cell-2-10" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Tpeak"</span>: bmb.Prior(<span class="st">"Normal"</span>, mu <span class="op">=</span> <span class="dv">0</span>, sigma <span class="op">=</span> <span class="dv">1</span>),</span>
+<span id="annotated-cell-2-11"><a href="#annotated-cell-2-11" aria-hidden="true" tabindex="-1"></a>            <span class="st">"WLres"</span>: bmb.Prior(<span class="st">"Normal"</span>, mu <span class="op">=</span> <span class="dv">0</span>, sigma <span class="op">=</span> <span class="dv">1</span>),</span>
+<span id="annotated-cell-2-12"><a href="#annotated-cell-2-12" aria-hidden="true" tabindex="-1"></a>            <span class="st">"sigma"</span>: bmb.Prior(<span class="st">"HalfNormal"</span>, sigma <span class="op">=</span> <span class="dv">2</span>)</span>
+<span id="annotated-cell-2-13"><a href="#annotated-cell-2-13" aria-hidden="true" tabindex="-1"></a>        },</span>
+<a class="code-annotation-anchor" data-target-cell="annotated-cell-2" data-target-annotation="4" onclick="event.preventDefault();" href="">4</a><span id="annotated-cell-2-14" class="code-annotation-target"><a href="#annotated-cell-2-14" aria-hidden="true" tabindex="-1"></a>        family <span class="op">=</span> <span class="st">"gaussian"</span></span>
+<span id="annotated-cell-2-15"><a href="#annotated-cell-2-15" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="annotated-cell-2-16"><a href="#annotated-cell-2-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="annotated-cell-2-17"><a href="#annotated-cell-2-17" aria-hidden="true" tabindex="-1"></a><span class="co"># tell Bambi to draw samples using MCMC</span></span>
+<a class="code-annotation-anchor" data-target-cell="annotated-cell-2" data-target-annotation="5" onclick="event.preventDefault();" href="">5</a><span id="annotated-cell-2-18" class="code-annotation-target"><a href="#annotated-cell-2-18" aria-hidden="true" tabindex="-1"></a>fit_smoothie <span class="op">=</span> mod_smoothie.fit(</span>
+<span id="annotated-cell-2-19"><a href="#annotated-cell-2-19" aria-hidden="true" tabindex="-1"></a>    draws <span class="op">=</span> <span class="dv">2000</span>,</span>
+<span id="annotated-cell-2-20"><a href="#annotated-cell-2-20" aria-hidden="true" tabindex="-1"></a>    idata_kwargs<span class="op">=</span><span class="bu">dict</span>(log_likelihood <span class="op">=</span> <span class="va">True</span>)</span>
+<span id="annotated-cell-2-21"><a href="#annotated-cell-2-21" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="annotated-cell-2-22"><a href="#annotated-cell-2-22" aria-hidden="true" tabindex="-1"></a><span class="co"># and make predcictions (added to fit_smoothie)</span></span>
+<a class="code-annotation-anchor" data-target-cell="annotated-cell-2" data-target-annotation="6" onclick="event.preventDefault();" href="">6</a><span id="annotated-cell-2-23" class="code-annotation-target"><a href="#annotated-cell-2-23" aria-hidden="true" tabindex="-1"></a>mod_smoothie.predict(fit_smoothie, kind <span class="op">=</span> <span class="st">"response"</span>)</span><div class="code-annotation-gutter-bg"></div><div class="code-annotation-gutter"></div></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-annotation">
+<dl class="code-annotation-container-grid">
+<dt data-target-cell="annotated-cell-2" data-target-annotation="1">1</dt>
+<dd>
+<span data-code-cell="annotated-cell-2" data-code-lines="3" data-code-annotation="1">This is the model itself. It specifies the same equation we saw above naming all of the columns of the data (from <code>df</code> that we will use), <code>Bambi</code> implictly then fits a <span class="math inline">\(\beta\)</span> term per covariate. We have defined how we expect the input to be related to the output (in this case via a simple additive linear model).</span>
+</dd>
+<dt data-target-cell="annotated-cell-2" data-target-annotation="2">2</dt>
+<dd>
+<span data-code-cell="annotated-cell-2" data-code-lines="4" data-code-annotation="2">Models, oh how they covet data.</span>
+</dd>
+<dt data-target-cell="annotated-cell-2" data-target-annotation="3">3</dt>
+<dd>
+<span data-code-cell="annotated-cell-2" data-code-lines="5,6,7,8,9,10,11,12,13" data-code-annotation="3">Really the specification of the prior is the main new part from what the authors did in their paper. Here we list each of our parameters (or the variables with corresponding <span class="math inline">\(\beta\)</span> parameters), and tell the model a space in which we expect to find the plausible values for these parameters. Here we won’t think to hard about this, how about something close to we are 68% sure that our paramaeter values lie between -1 and 1, 95% sure they’re between -2 and 2. Ths corresponds to a prior of <span class="math inline">\(\beta \sim \mathcal{N}(0, 1)\)</span>. We have one other type of prior we used, and that is the <code>HalfNormal</code> prior for <span class="math inline">\(\sigma\)</span>. <span class="math inline">\(\sigma\)</span> is a little special compared to the other parameters and that’s because it cannot be negative. A normal distribution with negative standard deviation doesn’t make sense. So in this case we use smile meditation and a half normal prior (bounded at 0) to enforce positivity.</span>
+</dd>
+<dt data-target-cell="annotated-cell-2" data-target-annotation="4">4</dt>
+<dd>
+<span data-code-cell="annotated-cell-2" data-code-lines="14" data-code-annotation="4">The next part is specifies the form of the residuals if you want to think about it that way, or the final part in the data generating process modelling the distribution of observations given the model as we saw above. This defines our likelihood again as discussed above.</span>
+</dd>
+<dt data-target-cell="annotated-cell-2" data-target-annotation="5">5</dt>
+<dd>
+<span data-code-cell="annotated-cell-2" data-code-lines="18,19,20,21" data-code-annotation="5">Now lets fit the model, letting the sampling fairy do its work to take 2000 samples from the posterior using MCMC</span>
+</dd>
+<dt data-target-cell="annotated-cell-2" data-target-annotation="6">6</dt>
+<dd>
+<span data-code-cell="annotated-cell-2" data-code-lines="23" data-code-annotation="6">Last of all we make predictions on the data using the model so that we can compare the fit to Figure 8 of the paper and check we haven’t stuffed anything up</span>
+</dd>
+</dl>
+</div>
+</div>
+<p>Oh you’re so close to seeing a model fit, but following a <a href="https://doi.org/10.48550/arXiv.2011.01808">good Bayesian workflow</a> we’re going to check our priors first. Remember we set out with the goal of merely shaving the edges off infinity to a sensible range. Lets wee how we did. Luckily <code>Bambi</code> provides a convenience function (<code>.plot_priors()</code>) for this. You can see first of all in practice how much weight we are giving various values, as we said above telling the model we are quite sure the values lie between -2 and 2.</p>
+<div id="cc254a13" class="cell" data-execution_count="14">
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># plot the prior distributions themselves </span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>mod_smoothie.plot_priors(figsize<span class="op">=</span>(<span class="dv">9</span>, <span class="dv">8</span>))</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="co"># and sample from the priors to get predictions</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>prior_pred <span class="op">=</span> mod_smoothie.prior_predictive()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Sampling: [Dpo, Eocum, Intercept, Tpeak, WLres, Wpre, sigma]
+Sampling: [Dpo, Eocum, Intercept, Tpeak, WLres, Wpre, dW, sigma]</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="stormerosion_bayesian_linear_regression_files/figure-html/cell-14-output-2.png" class="lightbox" data-gallery="quarto-lightbox-gallery-2"><img src="stormerosion_bayesian_linear_regression_files/figure-html/cell-14-output-2.png" width="689" height="662" class="figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>You can see the second convenience function we used in the code above, <code>prior_predictive()</code>. This is kind of cool. Because of our conceptualisation of the model as representing a data generating process we can simulate observations straight off the bat using only our priors. So we can see below that for the top 10 storms, our prior model predicts values of shoreline change will be less than 1000s of meters. Our model predicts a mean of around 0 and the coloured bars show the 89% confidence intervals for our predictions (more on this below). So again, we’re not being too restrictive and we definitely cover all the reasonable parameter values. However, we’ve helped the sampler into a reasonable search space.</p>
+<div id="ecab2990" class="cell" data-execution_count="15">
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="stormerosion_bayesian_linear_regression_files/figure-html/cell-15-output-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-3"><img src="stormerosion_bayesian_linear_regression_files/figure-html/cell-15-output-1.png" width="753" height="331" class="figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>And now we come to our beautiful posterior distributions which we can examine using the <code>arviz</code> package.</p>
+<div id="6bb48018" class="cell" data-execution_count="16">
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>ax1 <span class="op">=</span> az.plot_forest(</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    fit_smoothie,</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    var_names<span class="op">=</span>[<span class="st">"~sigma"</span>, <span class="st">"~mu"</span>],</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    combined <span class="op">=</span> <span class="va">True</span>,</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    hdi_prob <span class="op">=</span> <span class="fl">0.89</span>,</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    figsize <span class="op">=</span> (<span class="dv">5</span>, <span class="dv">4</span>)</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>fix_forest_plots(ax1[<span class="dv">0</span>])</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="stormerosion_bayesian_linear_regression_files/figure-html/cell-16-output-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-4"><img src="stormerosion_bayesian_linear_regression_files/figure-html/cell-16-output-1.png" width="485" height="367" class="figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Okay we have some <span class="math inline">\(\beta\)</span>s now. You can read the paper if you want the indepth analysis, but broadly for example for this model we see shoreline change is most strongly associated with <span class="math inline">\(E_{o,cum}\)</span>, with higher offshore wave energy producing more erosion on average. We can see that we are quite uncertain as to the effect of <span class="math inline">\(WL_{res}\)</span> with the confidence intervals straddling zero (note: for this model).</p>
+<p>While we won’t cover it here, <code>arviz</code> provides excellent diagnostics for viewing the sampling traces and checking for convergence. This can be really useful if things are going wrong with your model, Bayes will typically be quite transparent when you’ve messed up. While this can sometime lead to hours/days of hair pulling trying to get complex models working, I think that a tendency not to silently fail is a real strength. Good friends have the courage to tell you when you’ve made a mistake.</p>
+<div class="callout callout-style-simple callout-note no-icon callout-titled" title="Show me example code">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-8-contents" aria-controls="callout-8" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Show me example code
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-8" class="callout-8-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div id="ca0b6641" class="cell" data-execution_count="17">
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># plot the trace to see how sampling progressed </span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>az.plot_trace(</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    fit_smoothie,</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    var_names <span class="op">=</span> [<span class="st">"Intercept"</span>, <span class="st">"sigma"</span>],</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    figsize <span class="op">=</span> (<span class="dv">9</span>, <span class="dv">5</span>)</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="co"># convergence diagnostics - close to 1 is good</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>az.rhat(fit_smoothie)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="44">
+<div><svg style="position: absolute; width: 0; height: 0; overflow: hidden">
+<defs>
+<symbol id="icon-database" viewbox="0 0 32 32">
+<path d="M16 0c-8.837 0-16 2.239-16 5v4c0 2.761 7.163 5 16 5s16-2.239 16-5v-4c0-2.761-7.163-5-16-5z"></path>
+<path d="M16 17c-8.837 0-16-2.239-16-5v6c0 2.761 7.163 5 16 5s16-2.239 16-5v-6c0 2.761-7.163 5-16 5z"></path>
+<path d="M16 26c-8.837 0-16-2.239-16-5v6c0 2.761 7.163 5 16 5s16-2.239 16-5v-6c0 2.761-7.163 5-16 5z"></path>
+</symbol>
+<symbol id="icon-file-text2" viewbox="0 0 32 32">
+<path d="M28.681 7.159c-0.694-0.947-1.662-2.053-2.724-3.116s-2.169-2.030-3.116-2.724c-1.612-1.182-2.393-1.319-2.841-1.319h-15.5c-1.378 0-2.5 1.121-2.5 2.5v27c0 1.378 1.122 2.5 2.5 2.5h23c1.378 0 2.5-1.122 2.5-2.5v-19.5c0-0.448-0.137-1.23-1.319-2.841zM24.543 5.457c0.959 0.959 1.712 1.825 2.268 2.543h-4.811v-4.811c0.718 0.556 1.584 1.309 2.543 2.268zM28 29.5c0 0.271-0.229 0.5-0.5 0.5h-23c-0.271 0-0.5-0.229-0.5-0.5v-27c0-0.271 0.229-0.5 0.5-0.5 0 0 15.499-0 15.5 0v7c0 0.552 0.448 1 1 1h7v19.5z"></path>
+<path d="M23 26h-14c-0.552 0-1-0.448-1-1s0.448-1 1-1h14c0.552 0 1 0.448 1 1s-0.448 1-1 1z"></path>
+<path d="M23 22h-14c-0.552 0-1-0.448-1-1s0.448-1 1-1h14c0.552 0 1 0.448 1 1s-0.448 1-1 1z"></path>
+<path d="M23 18h-14c-0.552 0-1-0.448-1-1s0.448-1 1-1h14c0.552 0 1 0.448 1 1s-0.448 1-1 1z"></path>
+</symbol>
+</defs>
+</svg>
+<style>/* CSS stylesheet for displaying xarray objects in jupyterlab.
+ *
+ */
+
+:root {
+  --xr-font-color0: var(--jp-content-font-color0, rgba(0, 0, 0, 1));
+  --xr-font-color2: var(--jp-content-font-color2, rgba(0, 0, 0, 0.54));
+  --xr-font-color3: var(--jp-content-font-color3, rgba(0, 0, 0, 0.38));
+  --xr-border-color: var(--jp-border-color2, #e0e0e0);
+  --xr-disabled-color: var(--jp-layout-color3, #bdbdbd);
+  --xr-background-color: var(--jp-layout-color0, white);
+  --xr-background-color-row-even: var(--jp-layout-color1, white);
+  --xr-background-color-row-odd: var(--jp-layout-color2, #eeeeee);
+}
+
+html[theme=dark],
+body[data-theme=dark],
+body.vscode-dark {
+  --xr-font-color0: rgba(255, 255, 255, 1);
+  --xr-font-color2: rgba(255, 255, 255, 0.54);
+  --xr-font-color3: rgba(255, 255, 255, 0.38);
+  --xr-border-color: #1F1F1F;
+  --xr-disabled-color: #515151;
+  --xr-background-color: #111111;
+  --xr-background-color-row-even: #111111;
+  --xr-background-color-row-odd: #313131;
+}
+
+.xr-wrap {
+  display: block !important;
+  min-width: 300px;
+  max-width: 700px;
+}
+
+.xr-text-repr-fallback {
+  /* fallback to plain text repr when CSS is not injected (untrusted notebook) */
+  display: none;
+}
+
+.xr-header {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: solid 1px var(--xr-border-color);
+}
+
+.xr-header > div,
+.xr-header > ul {
+  display: inline;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.xr-obj-type,
+.xr-array-name {
+  margin-left: 2px;
+  margin-right: 10px;
+}
+
+.xr-obj-type {
+  color: var(--xr-font-color2);
+}
+
+.xr-sections {
+  padding-left: 0 !important;
+  display: grid;
+  grid-template-columns: 150px auto auto 1fr 20px 20px;
+}
+
+.xr-section-item {
+  display: contents;
+}
+
+.xr-section-item input {
+  display: none;
+}
+
+.xr-section-item input + label {
+  color: var(--xr-disabled-color);
+}
+
+.xr-section-item input:enabled + label {
+  cursor: pointer;
+  color: var(--xr-font-color2);
+}
+
+.xr-section-item input:enabled + label:hover {
+  color: var(--xr-font-color0);
+}
+
+.xr-section-summary {
+  grid-column: 1;
+  color: var(--xr-font-color2);
+  font-weight: 500;
+}
+
+.xr-section-summary > span {
+  display: inline-block;
+  padding-left: 0.5em;
+}
+
+.xr-section-summary-in:disabled + label {
+  color: var(--xr-font-color2);
+}
+
+.xr-section-summary-in + label:before {
+  display: inline-block;
+  content: '►';
+  font-size: 11px;
+  width: 15px;
+  text-align: center;
+}
+
+.xr-section-summary-in:disabled + label:before {
+  color: var(--xr-disabled-color);
+}
+
+.xr-section-summary-in:checked + label:before {
+  content: '▼';
+}
+
+.xr-section-summary-in:checked + label > span {
+  display: none;
+}
+
+.xr-section-summary,
+.xr-section-inline-details {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.xr-section-inline-details {
+  grid-column: 2 / -1;
+}
+
+.xr-section-details {
+  display: none;
+  grid-column: 1 / -1;
+  margin-bottom: 5px;
+}
+
+.xr-section-summary-in:checked ~ .xr-section-details {
+  display: contents;
+}
+
+.xr-array-wrap {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 20px auto;
+}
+
+.xr-array-wrap > label {
+  grid-column: 1;
+  vertical-align: top;
+}
+
+.xr-preview {
+  color: var(--xr-font-color3);
+}
+
+.xr-array-preview,
+.xr-array-data {
+  padding: 0 5px !important;
+  grid-column: 2;
+}
+
+.xr-array-data,
+.xr-array-in:checked ~ .xr-array-preview {
+  display: none;
+}
+
+.xr-array-in:checked ~ .xr-array-data,
+.xr-array-preview {
+  display: inline-block;
+}
+
+.xr-dim-list {
+  display: inline-block !important;
+  list-style: none;
+  padding: 0 !important;
+  margin: 0;
+}
+
+.xr-dim-list li {
+  display: inline-block;
+  padding: 0;
+  margin: 0;
+}
+
+.xr-dim-list:before {
+  content: '(';
+}
+
+.xr-dim-list:after {
+  content: ')';
+}
+
+.xr-dim-list li:not(:last-child):after {
+  content: ',';
+  padding-right: 5px;
+}
+
+.xr-has-index {
+  font-weight: bold;
+}
+
+.xr-var-list,
+.xr-var-item {
+  display: contents;
+}
+
+.xr-var-item > div,
+.xr-var-item label,
+.xr-var-item > .xr-var-name span {
+  background-color: var(--xr-background-color-row-even);
+  margin-bottom: 0;
+}
+
+.xr-var-item > .xr-var-name:hover span {
+  padding-right: 5px;
+}
+
+.xr-var-list > li:nth-child(odd) > div,
+.xr-var-list > li:nth-child(odd) > label,
+.xr-var-list > li:nth-child(odd) > .xr-var-name span {
+  background-color: var(--xr-background-color-row-odd);
+}
+
+.xr-var-name {
+  grid-column: 1;
+}
+
+.xr-var-dims {
+  grid-column: 2;
+}
+
+.xr-var-dtype {
+  grid-column: 3;
+  text-align: right;
+  color: var(--xr-font-color2);
+}
+
+.xr-var-preview {
+  grid-column: 4;
+}
+
+.xr-index-preview {
+  grid-column: 2 / 5;
+  color: var(--xr-font-color2);
+}
+
+.xr-var-name,
+.xr-var-dims,
+.xr-var-dtype,
+.xr-preview,
+.xr-attrs dt {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 10px;
+}
+
+.xr-var-name:hover,
+.xr-var-dims:hover,
+.xr-var-dtype:hover,
+.xr-attrs dt:hover {
+  overflow: visible;
+  width: auto;
+  z-index: 1;
+}
+
+.xr-var-attrs,
+.xr-var-data,
+.xr-index-data {
+  display: none;
+  background-color: var(--xr-background-color) !important;
+  padding-bottom: 5px !important;
+}
+
+.xr-var-attrs-in:checked ~ .xr-var-attrs,
+.xr-var-data-in:checked ~ .xr-var-data,
+.xr-index-data-in:checked ~ .xr-index-data {
+  display: block;
+}
+
+.xr-var-data > table {
+  float: right;
+}
+
+.xr-var-name span,
+.xr-var-data,
+.xr-index-name div,
+.xr-index-data,
+.xr-attrs {
+  padding-left: 25px !important;
+}
+
+.xr-attrs,
+.xr-var-attrs,
+.xr-var-data,
+.xr-index-data {
+  grid-column: 1 / -1;
+}
+
+dl.xr-attrs {
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 125px auto;
+}
+
+.xr-attrs dt,
+.xr-attrs dd {
+  padding: 0;
+  margin: 0;
+  float: left;
+  padding-right: 10px;
+  width: auto;
+}
+
+.xr-attrs dt {
+  font-weight: normal;
+  grid-column: 1;
+}
+
+.xr-attrs dt:hover span {
+  display: inline-block;
+  background: var(--xr-background-color);
+  padding-right: 10px;
+}
+
+.xr-attrs dd {
+  grid-column: 2;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.xr-icon-database,
+.xr-icon-file-text2,
+.xr-no-icon {
+  display: inline-block;
+  vertical-align: middle;
+  width: 1em;
+  height: 1.5em !important;
+  stroke-width: 0;
+  stroke: currentColor;
+  fill: currentColor;
+}
+</style><pre class="xr-text-repr-fallback">&lt;xarray.Dataset&gt; Size: 10kB
+Dimensions:    (__obs__: 597)
+Coordinates:
+  * __obs__    (__obs__) int64 5kB 0 1 2 3 4 5 6 ... 590 591 592 593 594 595 596
+Data variables:
+    Dpo        float64 8B 1.0
+    Eocum      float64 8B 1.0
+    Intercept  float64 8B 1.001
+    Tpeak      float64 8B 1.001
+    WLres      float64 8B 1.0
+    Wpre       float64 8B 0.9999
+    sigma      float64 8B 1.001
+    mu         (__obs__) float64 5kB 1.0 1.0 1.0 1.0 1.0 ... 1.0 1.0 1.0 1.0 1.0</pre><div class="xr-wrap" style="display:none"><div class="xr-header"><div class="xr-obj-type">xarray.Dataset</div></div><ul class="xr-sections"><li class="xr-section-item"><input id="section-8a37dfa0-85eb-47f6-946b-16af546690ff" class="xr-section-summary-in" type="checkbox" disabled=""><label for="section-8a37dfa0-85eb-47f6-946b-16af546690ff" class="xr-section-summary" title="Expand/collapse section">Dimensions:</label><div class="xr-section-inline-details"><ul class="xr-dim-list"><li><span class="xr-has-index">__obs__</span>: 597</li></ul></div><div class="xr-section-details"></div></li><li class="xr-section-item"><input id="section-cf7143a7-1bfa-4183-b0e4-46fe27d4e3af" class="xr-section-summary-in" type="checkbox" checked=""><label for="section-cf7143a7-1bfa-4183-b0e4-46fe27d4e3af" class="xr-section-summary">Coordinates: <span>(1)</span></label><div class="xr-section-inline-details"></div><div class="xr-section-details"><ul class="xr-var-list"><li class="xr-var-item"><div class="xr-var-name"><span class="xr-has-index">__obs__</span></div><div class="xr-var-dims">(__obs__)</div><div class="xr-var-dtype">int64</div><div class="xr-var-preview xr-preview">0 1 2 3 4 5 ... 592 593 594 595 596</div><input id="attrs-e14bc80e-b2b9-421f-a04d-b46b9a7672ae" class="xr-var-attrs-in" type="checkbox" disabled=""><label for="attrs-e14bc80e-b2b9-421f-a04d-b46b9a7672ae" title="Show/Hide attributes"><svg class="icon xr-icon-file-text2"><use href="#icon-file-text2"></use></svg></label><input id="data-aafa98ef-d5b8-4e5f-bcb4-ad5c3d91e283" class="xr-var-data-in" type="checkbox"><label for="data-aafa98ef-d5b8-4e5f-bcb4-ad5c3d91e283" title="Show/Hide data repr"><svg class="icon xr-icon-database"><use href="#icon-database"></use></svg></label><div class="xr-var-attrs"><dl class="xr-attrs"></dl></div><div class="xr-var-data"><pre>array([  0,   1,   2, ..., 594, 595, 596])</pre></div></li></ul></div></li><li class="xr-section-item"><input id="section-13f180e6-5ac3-4862-9fa6-31a72bce1681" class="xr-section-summary-in" type="checkbox" checked=""><label for="section-13f180e6-5ac3-4862-9fa6-31a72bce1681" class="xr-section-summary">Data variables: <span>(8)</span></label><div class="xr-section-inline-details"></div><div class="xr-section-details"><ul class="xr-var-list"><li class="xr-var-item"><div class="xr-var-name"><span>Dpo</span></div><div class="xr-var-dims">()</div><div class="xr-var-dtype">float64</div><div class="xr-var-preview xr-preview">1.0</div><input id="attrs-08ad9430-71e5-44ce-bf2a-b9542daaa61f" class="xr-var-attrs-in" type="checkbox" disabled=""><label for="attrs-08ad9430-71e5-44ce-bf2a-b9542daaa61f" title="Show/Hide attributes"><svg class="icon xr-icon-file-text2"><use href="#icon-file-text2"></use></svg></label><input id="data-ecff6271-a2b8-4eb4-8af6-c32d2fe623c6" class="xr-var-data-in" type="checkbox"><label for="data-ecff6271-a2b8-4eb4-8af6-c32d2fe623c6" title="Show/Hide data repr"><svg class="icon xr-icon-database"><use href="#icon-database"></use></svg></label><div class="xr-var-attrs"><dl class="xr-attrs"></dl></div><div class="xr-var-data"><pre>array(1.00030655)</pre></div></li><li class="xr-var-item"><div class="xr-var-name"><span>Eocum</span></div><div class="xr-var-dims">()</div><div class="xr-var-dtype">float64</div><div class="xr-var-preview xr-preview">1.0</div><input id="attrs-259669d0-6564-4399-a572-3cfcfe7f3a6e" class="xr-var-attrs-in" type="checkbox" disabled=""><label for="attrs-259669d0-6564-4399-a572-3cfcfe7f3a6e" title="Show/Hide attributes"><svg class="icon xr-icon-file-text2"><use href="#icon-file-text2"></use></svg></label><input id="data-c4e225d8-264f-4368-b9e8-af48d9389632" class="xr-var-data-in" type="checkbox"><label for="data-c4e225d8-264f-4368-b9e8-af48d9389632" title="Show/Hide data repr"><svg class="icon xr-icon-database"><use href="#icon-database"></use></svg></label><div class="xr-var-attrs"><dl class="xr-attrs"></dl></div><div class="xr-var-data"><pre>array(1.000015)</pre></div></li><li class="xr-var-item"><div class="xr-var-name"><span>Intercept</span></div><div class="xr-var-dims">()</div><div class="xr-var-dtype">float64</div><div class="xr-var-preview xr-preview">1.001</div><input id="attrs-a111f6d6-2b0a-4504-abca-3d5d96001103" class="xr-var-attrs-in" type="checkbox" disabled=""><label for="attrs-a111f6d6-2b0a-4504-abca-3d5d96001103" title="Show/Hide attributes"><svg class="icon xr-icon-file-text2"><use href="#icon-file-text2"></use></svg></label><input id="data-70d76ee4-751d-4796-ae73-1cc8ea507bc3" class="xr-var-data-in" type="checkbox"><label for="data-70d76ee4-751d-4796-ae73-1cc8ea507bc3" title="Show/Hide data repr"><svg class="icon xr-icon-database"><use href="#icon-database"></use></svg></label><div class="xr-var-attrs"><dl class="xr-attrs"></dl></div><div class="xr-var-data"><pre>array(1.00081228)</pre></div></li><li class="xr-var-item"><div class="xr-var-name"><span>Tpeak</span></div><div class="xr-var-dims">()</div><div class="xr-var-dtype">float64</div><div class="xr-var-preview xr-preview">1.001</div><input id="attrs-78fc6b36-b796-4616-9fbd-19487ea22a6b" class="xr-var-attrs-in" type="checkbox" disabled=""><label for="attrs-78fc6b36-b796-4616-9fbd-19487ea22a6b" title="Show/Hide attributes"><svg class="icon xr-icon-file-text2"><use href="#icon-file-text2"></use></svg></label><input id="data-016a9f38-3bdf-43ef-bee4-614b5b206b44" class="xr-var-data-in" type="checkbox"><label for="data-016a9f38-3bdf-43ef-bee4-614b5b206b44" title="Show/Hide data repr"><svg class="icon xr-icon-database"><use href="#icon-database"></use></svg></label><div class="xr-var-attrs"><dl class="xr-attrs"></dl></div><div class="xr-var-data"><pre>array(1.00139972)</pre></div></li><li class="xr-var-item"><div class="xr-var-name"><span>WLres</span></div><div class="xr-var-dims">()</div><div class="xr-var-dtype">float64</div><div class="xr-var-preview xr-preview">1.0</div><input id="attrs-3f6bf1a6-e496-495b-9c57-e7200bc954ea" class="xr-var-attrs-in" type="checkbox" disabled=""><label for="attrs-3f6bf1a6-e496-495b-9c57-e7200bc954ea" title="Show/Hide attributes"><svg class="icon xr-icon-file-text2"><use href="#icon-file-text2"></use></svg></label><input id="data-73b9aea1-aa28-4218-9bd2-80319b2d3ee4" class="xr-var-data-in" type="checkbox"><label for="data-73b9aea1-aa28-4218-9bd2-80319b2d3ee4" title="Show/Hide data repr"><svg class="icon xr-icon-database"><use href="#icon-database"></use></svg></label><div class="xr-var-attrs"><dl class="xr-attrs"></dl></div><div class="xr-var-data"><pre>array(0.99998155)</pre></div></li><li class="xr-var-item"><div class="xr-var-name"><span>Wpre</span></div><div class="xr-var-dims">()</div><div class="xr-var-dtype">float64</div><div class="xr-var-preview xr-preview">0.9999</div><input id="attrs-85b211bb-6a83-4662-a89e-9cd22cc4b634" class="xr-var-attrs-in" type="checkbox" disabled=""><label for="attrs-85b211bb-6a83-4662-a89e-9cd22cc4b634" title="Show/Hide attributes"><svg class="icon xr-icon-file-text2"><use href="#icon-file-text2"></use></svg></label><input id="data-da6abb0a-df24-459a-bcca-24b9b5d0e56f" class="xr-var-data-in" type="checkbox"><label for="data-da6abb0a-df24-459a-bcca-24b9b5d0e56f" title="Show/Hide data repr"><svg class="icon xr-icon-database"><use href="#icon-database"></use></svg></label><div class="xr-var-attrs"><dl class="xr-attrs"></dl></div><div class="xr-var-data"><pre>array(0.99988217)</pre></div></li><li class="xr-var-item"><div class="xr-var-name"><span>sigma</span></div><div class="xr-var-dims">()</div><div class="xr-var-dtype">float64</div><div class="xr-var-preview xr-preview">1.001</div><input id="attrs-40d568fa-8974-4e64-b34d-1f58256d2081" class="xr-var-attrs-in" type="checkbox" disabled=""><label for="attrs-40d568fa-8974-4e64-b34d-1f58256d2081" title="Show/Hide attributes"><svg class="icon xr-icon-file-text2"><use href="#icon-file-text2"></use></svg></label><input id="data-15ec82d4-db7b-457f-85d3-91f0452ede88" class="xr-var-data-in" type="checkbox"><label for="data-15ec82d4-db7b-457f-85d3-91f0452ede88" title="Show/Hide data repr"><svg class="icon xr-icon-database"><use href="#icon-database"></use></svg></label><div class="xr-var-attrs"><dl class="xr-attrs"></dl></div><div class="xr-var-data"><pre>array(1.00119145)</pre></div></li><li class="xr-var-item"><div class="xr-var-name"><span>mu</span></div><div class="xr-var-dims">(__obs__)</div><div class="xr-var-dtype">float64</div><div class="xr-var-preview xr-preview">1.0 1.0 1.0 1.0 ... 1.0 1.0 1.0 1.0</div><input id="attrs-49dd5a0e-7e10-491a-918a-cf93e7d04113" class="xr-var-attrs-in" type="checkbox" disabled=""><label for="attrs-49dd5a0e-7e10-491a-918a-cf93e7d04113" title="Show/Hide attributes"><svg class="icon xr-icon-file-text2"><use href="#icon-file-text2"></use></svg></label><input id="data-0be56c97-59e1-4622-86f3-d9932fcef03a" class="xr-var-data-in" type="checkbox"><label for="data-0be56c97-59e1-4622-86f3-d9932fcef03a" title="Show/Hide data repr"><svg class="icon xr-icon-database"><use href="#icon-database"></use></svg></label><div class="xr-var-attrs"><dl class="xr-attrs"></dl></div><div class="xr-var-data"><pre>array([1.00027873, 1.00046958, 1.00045978, 1.00035031, 0.999986  ,
+       0.99992746, 0.99989911, 0.99987755, 0.99997028, 0.99999199,
+       1.0004946 , 1.00054539, 1.00096443, 1.00096551, 1.00003077,
+       1.00007888, 1.0002037 , 1.00027767, 0.99989039, 0.99981758,
+       1.00036233, 1.00031654, 1.00004599, 0.99988176, 1.00039426,
+       1.00036165, 0.99982343, 0.9999054 , 1.00153871, 1.00096861,
+       1.0006999 , 1.00014197, 1.00048383, 1.00048023, 1.0001166 ,
+       1.00007721, 1.00010767, 1.00057938, 1.00021859, 1.00000693,
+       1.00041955, 0.99990159, 0.99990079, 1.00091697, 1.00087595,
+       1.00015059, 1.00014196, 1.0005295 , 1.00054749, 1.00031528,
+       1.00013379, 0.99993423, 0.99978839, 1.00001786, 0.99969457,
+       1.00265316, 1.00103342, 1.00266216, 1.00127875, 1.00017074,
+       1.0002561 , 1.00057613, 1.00069539, 1.00086425, 1.00036898,
+       1.00027956, 1.00022073, 1.00014546, 0.99998032, 0.99995099,
+       0.99982568, 0.99992525, 1.00002248, 1.00029732, 1.00010126,
+       1.00011822, 1.00004135, 1.00058426, 1.00101418, 1.00020958,
+       1.00032526, 1.00001431, 1.00008698, 1.00027374, 1.00052961,
+       1.00016992, 1.00017429, 1.00022104, 0.99987606, 1.00023744,
+       1.00023542, 1.00081754, 1.00018295, 1.00047491, 1.00012164,
+       0.99986616, 0.99996159, 1.00001828, 1.00055888, 1.00027606,
+...
+       1.00058997, 1.00035296, 1.00011558, 1.00026804, 1.00018719,
+       0.99999047, 1.00001025, 0.99990841, 1.00024373, 1.0000934 ,
+       1.00003512, 1.00018347, 1.00001153, 0.99997982, 1.00031151,
+       1.00004319, 1.00002322, 1.00047585, 1.00054171, 1.00053494,
+       1.00014133, 1.00046595, 1.00028472, 1.00000438, 1.00007617,
+       0.99992688, 1.00065362, 1.0003054 , 1.00073707, 0.99994274,
+       1.00047227, 1.00080025, 1.00041774, 1.00006501, 1.00000093,
+       1.00010648, 1.00049725, 0.99994031, 1.00014839, 1.00027608,
+       1.00039207, 1.0003579 , 1.00056145, 1.00038478, 1.00042002,
+       1.00011144, 1.00041571, 1.00046611, 1.00048819, 1.00025275,
+       1.00001059, 0.99993749, 1.00161655, 1.00072022, 1.00077122,
+       0.99988695, 0.99989428, 0.99995676, 1.00016914, 1.00004178,
+       1.00011517, 1.00031087, 1.00040423, 1.00033924, 1.00021375,
+       1.00008907, 0.99997821, 0.99985379, 0.99992887, 1.00049086,
+       0.99992419, 1.00022591, 1.00059448, 1.0003878 , 1.00034807,
+       1.00024537, 1.00001693, 1.00010259, 1.00011318, 1.0001306 ,
+       0.99990472, 0.99986771, 0.99975099, 1.00018201, 0.99996175,
+       0.99993147, 1.00051429, 1.00028849, 1.00019751, 1.0004105 ,
+       0.99997317, 1.00116222, 1.00018983, 1.00011782, 0.99996552,
+       0.99997298, 1.00016103])</pre></div></li></ul></div></li><li class="xr-section-item"><input id="section-2739a371-10fc-43d8-9f19-cd595dcf14a3" class="xr-section-summary-in" type="checkbox"><label for="section-2739a371-10fc-43d8-9f19-cd595dcf14a3" class="xr-section-summary">Indexes: <span>(1)</span></label><div class="xr-section-inline-details"></div><div class="xr-section-details"><ul class="xr-var-list"><li class="xr-var-item"><div class="xr-index-name"><div>__obs__</div></div><div class="xr-index-preview">PandasIndex</div><div></div><input id="index-b8dbdea5-e90d-4aea-9e1d-19d2df423af2" class="xr-index-data-in" type="checkbox"><label for="index-b8dbdea5-e90d-4aea-9e1d-19d2df423af2" title="Show/Hide index repr"><svg class="icon xr-icon-database"><use href="#icon-database"></use></svg></label><div class="xr-index-data"><pre>PandasIndex(Index([  0,   1,   2,   3,   4,   5,   6,   7,   8,   9,
+       ...
+       587, 588, 589, 590, 591, 592, 593, 594, 595, 596],
+      dtype='int64', name='__obs__', length=597))</pre></div></li></ul></div></li><li class="xr-section-item"><input id="section-a0e71a87-47cb-4f18-b60d-74f5f2a0f977" class="xr-section-summary-in" type="checkbox" disabled=""><label for="section-a0e71a87-47cb-4f18-b60d-74f5f2a0f977" class="xr-section-summary" title="Expand/collapse section">Attributes: <span>(0)</span></label><div class="xr-section-inline-details"></div><div class="xr-section-details"><dl class="xr-attrs"></dl></div></li></ul></div></div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="stormerosion_bayesian_linear_regression_files/figure-html/cell-17-output-2.png" class="lightbox" data-gallery="quarto-lightbox-gallery-5"><img src="stormerosion_bayesian_linear_regression_files/figure-html/cell-17-output-2.png" width="706" height="431" class="figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<p>Finally, saving the best until last - lets plot the predicitons of the model vs the data and compare to the paper to make sure we are on the right track.</p>
+<div id="3c4030de" class="cell" data-execution_count="18">
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="stormerosion_bayesian_linear_regression_files/figure-html/cell-18-output-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-6"><img src="stormerosion_bayesian_linear_regression_files/figure-html/cell-18-output-1.png" width="743" height="282" class="figure-img"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="stormerosion_bayesian_linear_regression_files/figure-html/cell-18-output-2.png" class="lightbox" data-gallery="quarto-lightbox-gallery-7"><img src="stormerosion_bayesian_linear_regression_files/figure-html/cell-18-output-2.png" width="731" height="282" class="figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Looking good, particularly for the partially sheltered location. But we are not matching the paper predictions and the keen eyed reader will understand why. We fit the model with no reference to the different locations. Our data have heterogeneity - different responses to the same storm event at different locations. What we’ve fit is one parameter to rule them all (per variable).</p>
+<p>But don’t worry I’ve got you, dawg. We set the data up at the start to make it really easy to build model complexity for just this scenario (whilst keeping the ability to extend into hierarchical models later on).</p>
+</section>
+<section id="a-dash-more-complexity" class="level2" data-number="3.2">
+<h2 data-number="3.2" class="anchored" data-anchor-id="a-dash-more-complexity"><span class="header-section-number">3.2</span> A dash more complexity</h2>
+<p>As a next step, we could consider that the three locations respond in the same way to storms, but have a different average response. For example, we think that <span class="math inline">\(E_{o,cum}\)</span> is always going to be a large driver of shoreline change, with the same sign correlation (positive or negative) at each location. But that our predicted shoreline change for an average storm would be different when looking at a part of the beach that is sheltered/partially sheltered/exposed.</p>
+<p>This we can call a group level intercept, i.e., a different intercept for each of our three locations which form the different groups in our dataset.</p>
+<div id="9dd8d02b" class="cell" data-execution_count="19">
+<div class="sourceCode cell-code" id="annotated-cell-5"><pre class="sourceCode python code-annotation-code code-with-copy code-annotated"><code class="sourceCode python"><span id="annotated-cell-5-1"><a href="#annotated-cell-5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># fit the location smoothie model</span></span>
+<span id="annotated-cell-5-2"><a href="#annotated-cell-5-2" aria-hidden="true" tabindex="-1"></a>mod_int_smoothie <span class="op">=</span> bmb.Model(</span>
+<a class="code-annotation-anchor" data-target-cell="annotated-cell-5" data-target-annotation="1" onclick="event.preventDefault();" href="">1</a><span id="annotated-cell-5-3" class="code-annotation-target"><a href="#annotated-cell-5-3" aria-hidden="true" tabindex="-1"></a>        <span class="st">"dW ~ 0 + location + Eocum + Wpre + Dpo + Tpeak + WLres"</span>,</span>
+<span id="annotated-cell-5-4"><a href="#annotated-cell-5-4" aria-hidden="true" tabindex="-1"></a>        df, </span>
+<span id="annotated-cell-5-5"><a href="#annotated-cell-5-5" aria-hidden="true" tabindex="-1"></a>        priors <span class="op">=</span> {</span>
+<span id="annotated-cell-5-6"><a href="#annotated-cell-5-6" aria-hidden="true" tabindex="-1"></a>            <span class="st">"location"</span>: bmb.Prior(<span class="st">"Normal"</span>, mu <span class="op">=</span> <span class="dv">0</span>, sigma <span class="op">=</span> <span class="dv">1</span>),</span>
+<span id="annotated-cell-5-7"><a href="#annotated-cell-5-7" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Eocum"</span>: bmb.Prior(<span class="st">"Normal"</span>, mu <span class="op">=</span> <span class="dv">0</span>, sigma <span class="op">=</span> <span class="dv">1</span>),</span>
+<span id="annotated-cell-5-8"><a href="#annotated-cell-5-8" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Wpre"</span>: bmb.Prior(<span class="st">"Normal"</span>, mu <span class="op">=</span> <span class="dv">0</span>, sigma <span class="op">=</span> <span class="dv">1</span>),</span>
+<span id="annotated-cell-5-9"><a href="#annotated-cell-5-9" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Dpo"</span>: bmb.Prior(<span class="st">"Normal"</span>, mu <span class="op">=</span> <span class="dv">0</span>, sigma <span class="op">=</span> <span class="dv">1</span>),</span>
+<span id="annotated-cell-5-10"><a href="#annotated-cell-5-10" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Tpeak"</span>: bmb.Prior(<span class="st">"Normal"</span>, mu <span class="op">=</span> <span class="dv">0</span>, sigma <span class="op">=</span> <span class="dv">1</span>),</span>
+<span id="annotated-cell-5-11"><a href="#annotated-cell-5-11" aria-hidden="true" tabindex="-1"></a>            <span class="st">"WLres"</span>: bmb.Prior(<span class="st">"Normal"</span>, mu <span class="op">=</span> <span class="dv">0</span>, sigma <span class="op">=</span> <span class="dv">1</span>),</span>
+<span id="annotated-cell-5-12"><a href="#annotated-cell-5-12" aria-hidden="true" tabindex="-1"></a>            <span class="st">"sigma"</span>: bmb.Prior(<span class="st">"HalfNormal"</span>, sigma<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="annotated-cell-5-13"><a href="#annotated-cell-5-13" aria-hidden="true" tabindex="-1"></a>        },</span>
+<span id="annotated-cell-5-14"><a href="#annotated-cell-5-14" aria-hidden="true" tabindex="-1"></a>        family <span class="op">=</span> <span class="st">"gaussian"</span></span>
+<span id="annotated-cell-5-15"><a href="#annotated-cell-5-15" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="annotated-cell-5-16"><a href="#annotated-cell-5-16" aria-hidden="true" tabindex="-1"></a><span class="co"># sampling fairy do your thing</span></span>
+<span id="annotated-cell-5-17"><a href="#annotated-cell-5-17" aria-hidden="true" tabindex="-1"></a>fit_int_smoothie <span class="op">=</span> mod_int_smoothie.fit(</span>
+<span id="annotated-cell-5-18"><a href="#annotated-cell-5-18" aria-hidden="true" tabindex="-1"></a>    draws <span class="op">=</span> <span class="dv">2000</span>,</span>
+<span id="annotated-cell-5-19"><a href="#annotated-cell-5-19" aria-hidden="true" tabindex="-1"></a>    idata_kwargs<span class="op">=</span><span class="bu">dict</span>(log_likelihood <span class="op">=</span> <span class="va">True</span>)</span>
+<span id="annotated-cell-5-20"><a href="#annotated-cell-5-20" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="annotated-cell-5-21"><a href="#annotated-cell-5-21" aria-hidden="true" tabindex="-1"></a><span class="co"># and make predcictions (added to fit_int_smoothie)</span></span>
+<span id="annotated-cell-5-22"><a href="#annotated-cell-5-22" aria-hidden="true" tabindex="-1"></a>mod_int_smoothie.predict(fit_int_smoothie, kind <span class="op">=</span> <span class="st">"response"</span>)</span><div class="code-annotation-gutter-bg"></div><div class="code-annotation-gutter"></div></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-annotation">
+<dl class="code-annotation-container-grid">
+<dt data-target-cell="annotated-cell-5" data-target-annotation="1">1</dt>
+<dd>
+<span data-code-cell="annotated-cell-5" data-code-lines="3" data-code-annotation="1">Note that we have updated the model now to have <code>location</code> (a factor) as a variable. This will create one intercept per location. We also add <code>0 +</code> to indicate to the model that we don’t want an overall intercept term. This would be unidentfiable as it could equally have a value or be abosrbed into the location intercepts.</span>
+</dd>
+</dl>
+</div>
+</div>
+<p>Lets see the difference to our old “smoothie” model where we simply blended the locations together.</p>
+<div id="f19a10c0" class="cell" data-execution_count="20">
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="stormerosion_bayesian_linear_regression_files/figure-html/cell-20-output-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-8"><img src="stormerosion_bayesian_linear_regression_files/figure-html/cell-20-output-1.png" width="568" height="515" class="figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>Hey! Nice, you can see from the forest plot that the estimates for each parameter have barely changed, and that we now have those group level intercepts.</p>
+<div id="069aeff5" class="cell" data-execution_count="21">
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="stormerosion_bayesian_linear_regression_files/figure-html/cell-21-output-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-9"><img src="stormerosion_bayesian_linear_regression_files/figure-html/cell-21-output-1.png" width="731" height="282" class="figure-img"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="stormerosion_bayesian_linear_regression_files/figure-html/cell-21-output-2.png" class="lightbox" data-gallery="quarto-lightbox-gallery-10"><img src="stormerosion_bayesian_linear_regression_files/figure-html/cell-21-output-2.png" width="743" height="282" class="figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>We’ve lifted our performance a fair bit at the exposed location and a little at the sheltered location. This is nothing to scoff at, we explain a lot of the variability with common regression terms at all locations and a group level intercept. It’s a nice model, and really this results is not unexpected. Beaches erode during storms, to varying degrees depending on the location, but we can expect that the physical drivers of shoreline change have similar effects along a single embayed beach such as this.</p>
+<p>Just like that we have stumbled into the the beginnings of a hierarchical model here, by a loose definition. Some parameters share information from the various groupings in the data and some are found seperately per group. We can get a little bit smarter about how we do this, in time…</p>
+<p>Instead, let’s do this model justice and return to fitting the way the authors intended, just Bayesian. There are three locations and, as the authors identified, there are small but important differences in the response behaviours at these locations.</p>
+<div class="callout callout-style-simple callout-note no-icon callout-titled" title="Coarse sand graining">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-9-contents" aria-controls="callout-9" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Coarse sand graining
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-9" class="callout-9-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>At least this is true at the level at which we are describing our processes. There is no difference in the fundamental physics at each location. Quarks be quarks and do quark stuff no matter where they are found on the beach. And perhaps physics based models might resolve the processes down to the level that it can represent the different observed behaviours without resorting to tuning parameter values at each (though IMHO this has been way too hard to achieve with any of these sorts of models that I’ve worked with). But definitely at the coarse grained level we are describing the processes at with our simple linear model, we expect the parameter fits to be different at each location which will have different responses to the same offshore storm.</p>
+</div>
+</div>
+</div>
+<p>And so we bestow upon each location it’s own <span class="math inline">\(\beta\)</span> parameters for each covariate which can be fit by the model. Luckily our data are in a format that will make this very easy as we started to do above. If we specify to the model it needs three parameters for each <span class="math inline">\(\beta\)</span>, we can use the corresponding <span class="math inline">\(\beta\)</span>s for each data point depending on its location. We tell this to <code>Bambi</code> with the following formula:</p>
+<div id="c1a46d65" class="cell" data-execution_count="22">
+<div class="sourceCode cell-code" id="annotated-cell-6"><pre class="sourceCode python code-annotation-code code-with-copy code-annotated"><code class="sourceCode python"><span id="annotated-cell-6-1"><a href="#annotated-cell-6-1" aria-hidden="true" tabindex="-1"></a>mod_factors <span class="op">=</span> bmb.Model(</span>
+<a class="code-annotation-anchor" data-target-cell="annotated-cell-6" data-target-annotation="1" onclick="event.preventDefault();" href="">1</a><span id="annotated-cell-6-2" class="code-annotation-target"><a href="#annotated-cell-6-2" aria-hidden="true" tabindex="-1"></a>    <span class="st">"dW ~ 0 + location + Eocum:location + Wpre:location + Dpo:location + Tpeak:location + WLres:location"</span>,</span>
+<span id="annotated-cell-6-3"><a href="#annotated-cell-6-3" aria-hidden="true" tabindex="-1"></a>    df,</span>
+<span id="annotated-cell-6-4"><a href="#annotated-cell-6-4" aria-hidden="true" tabindex="-1"></a>    family <span class="op">=</span> <span class="st">"gaussian"</span></span>
+<span id="annotated-cell-6-5"><a href="#annotated-cell-6-5" aria-hidden="true" tabindex="-1"></a>)</span><div class="code-annotation-gutter-bg"></div><div class="code-annotation-gutter"></div></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-annotation">
+<dl class="code-annotation-container-grid">
+<dt data-target-cell="annotated-cell-6" data-target-annotation="1">1</dt>
+<dd>
+<span data-code-cell="annotated-cell-6" data-code-lines="2" data-code-annotation="1">We are now specifying each variable to have one parameter per location with the <code>:location</code> syntax. If you don’t believe me, look below to the forest plots and beg forgiveness for your ever having doubted me.</span>
+</dd>
+</dl>
+</div>
+</div>
+<p>Lets look at our beautiful posterior distributions.</p>
+<div id="ea38d1de" class="cell" data-execution_count="25">
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="stormerosion_bayesian_linear_regression_files/figure-html/cell-25-output-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-11"><img src="stormerosion_bayesian_linear_regression_files/figure-html/cell-25-output-1.png" width="576" height="663" class="figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>I really like these plots, we see how the locations differ from each other in small but important ways. We can see locations at which we are more certain/uncertain of the effect of each covariate. We also see how these estimates pool together into a single <span class="math inline">\(\beta\)</span> for our “smoothie” model.</p>
+<p>Once more we plot the predictions and compare back to the paper to check that we recovered similar goodness of fit.</p>
+<div id="bf8196ea" class="cell" data-execution_count="27">
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="stormerosion_bayesian_linear_regression_files/figure-html/cell-27-output-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-12"><img src="stormerosion_bayesian_linear_regression_files/figure-html/cell-27-output-1.png" width="743" height="282" class="figure-img"></a></p>
+</figure>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="stormerosion_bayesian_linear_regression_files/figure-html/cell-27-output-2.png" class="lightbox" data-gallery="quarto-lightbox-gallery-13"><img src="stormerosion_bayesian_linear_regression_files/figure-html/cell-27-output-2.png" width="743" height="282" class="figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<div class="callout callout-style-simple callout-note no-icon callout-titled" title="Model comparison example">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-10-contents" aria-controls="callout-10" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Model comparison example
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-10" class="callout-10-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>We can compare the models (aiming for a higher elpd_loo value) using <code>az.compare</code> and see that each step we took improved the model.</p>
+<div id="6cc90bfc" class="cell" data-execution_count="28">
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compare loo for the three models</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>az.compare(</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>        <span class="st">"factors"</span>: fit_factors_raw,</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>        <span class="st">"smoothie"</span>: fit_smoothie,</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>        <span class="st">"int_smoothie"</span>: fit_int_smoothie</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-display" data-execution_count="55">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">rank</th>
+<th data-quarto-table-cell-role="th">elpd_loo</th>
+<th data-quarto-table-cell-role="th">p_loo</th>
+<th data-quarto-table-cell-role="th">elpd_diff</th>
+<th data-quarto-table-cell-role="th">weight</th>
+<th data-quarto-table-cell-role="th">se</th>
+<th data-quarto-table-cell-role="th">dse</th>
+<th data-quarto-table-cell-role="th">warning</th>
+<th data-quarto-table-cell-role="th">scale</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">factors</td>
+<td>0</td>
+<td>471.241250</td>
+<td>25.317404</td>
+<td>0.000000</td>
+<td>6.688429e-01</td>
+<td>23.540214</td>
+<td>0.000000</td>
+<td>False</td>
+<td>log</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">int_smoothie</td>
+<td>1</td>
+<td>462.143744</td>
+<td>11.622591</td>
+<td>9.097506</td>
+<td>3.311571e-01</td>
+<td>22.809676</td>
+<td>8.588629</td>
+<td>False</td>
+<td>log</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">smoothie</td>
+<td>2</td>
+<td>453.168524</td>
+<td>9.432036</td>
+<td>18.072725</td>
+<td>2.220446e-16</td>
+<td>21.792742</td>
+<td>8.486684</td>
+<td>False</td>
+<td>log</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="predicting-with-uncertainty" class="level1" data-number="4">
+<h1 data-number="4"><span class="header-section-number">4</span> Predicting with uncertainty</h1>
+<p>As we discussed up top, we fit this model using an approach that embraced uncertainty at its core. We should make sure we are utilising that for prediction. Above I’ve been wasteful, throwing our posterior into the trash compactor to come up with a mean prediction for each point. But it doesn’t have to be this way, we value the posterior and the information contained therein, so lets summarise it and display it below.</p>
+<div id="cea78aa4" class="cell" data-execution_count="29">
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><a href="stormerosion_bayesian_linear_regression_files/figure-html/cell-29-output-1.png" class="lightbox" data-gallery="quarto-lightbox-gallery-14"><img src="stormerosion_bayesian_linear_regression_files/figure-html/cell-29-output-1.png" width="744" height="331" class="figure-img"></a></p>
+</figure>
+</div>
+</div>
+</div>
+<p>We have plot the top 10 largest storm events and the predictions from our model with uncertainty. The mean is plot again as the dot in the middle, but now with two extra lines representing the 89% confidence intervals. Why two you ask?</p>
+<ul>
+<li>the blue line represents our parameter uncertainty, the range of predictions of average response coming out of our model (<span class="math inline">\(\mu\)</span>). As you have seen above we don’t quite know the value of each parameter and so we present the range of possible model fits that are plausible given the data and model structure.</li>
+<li>however, we expect (and fit our model with the assumption) that our actual observations are normally distributed about our average model prediction (<span class="math inline">\(\mu\)</span>), with some standard deviation <span class="math inline">\(\sigma\)</span>. The orange line represents this and gives the 89% prediction interval of where we expect our data points to lie, given that both our model is imperfect and we have measurement noise.</li>
+</ul>
+</section>
+<section id="we-did-it" class="level1" data-number="5">
+<h1 data-number="5"><span class="header-section-number">5</span> We did it</h1>
+<p>And there we have it, a Bayesian linear fit prediction uncertainty. If you’re left with an empty feeling, “all that for some blue and papaya lines and a smug new philosophical approach to model fitting?”, that’s okay. I’d argue that it by default more plainly lays out the relative confidence we have in each of the terms included in our model, which can only be helpful in scientific context. But I get it.</p>
+<p>But you ain’t seen nothing yet. The real power of Bayes comes from the ability of this workflow to scale to much, much more complex models. The extra degree of freedom given by the prior, allows us to fully describe our beliefs about the data in a way that we only glimpsed in this example.</p>
+<p>And so this post was really about laying the foundations for Bayesian hierarchical models. You saw when we fit the model altogether with the three locations, we actually got some great results. There is a lot of shared information in how a beach responds to storms within a fairly narrow geographical area. Hierarchical models help us to leverage these commonalities, whilst respecting subtle and important differences. And in doing so these models will help us avoid the worst of the demons that lurk in data-driven modelling.</p>
+</section>
+<section id="reading-list" class="level1" data-number="6">
+<h1 data-number="6"><span class="header-section-number">6</span> Reading list</h1>
+<ul>
+<li><a href="https://betanalpha.github.io/assets/case_studies/principled_bayesian_workflow.html">Bayesian workflow</a></li>
+<li><a href="https://xcelab.net/rm/">Statistical Rethinking - Richard McElreath</a></li>
+</ul>
+</section>
+
+</main>
+<!-- /main column -->
+<script type="application/vnd.jupyter.widget-state+json">
+{"state":{"0a758f3f7aed41f989f8f777ebf6046d":{"model_module":"@jupyter-widgets/output","model_module_version":"1.0.0","model_name":"OutputModel","state":{"_dom_classes":[],"_model_module":"@jupyter-widgets/output","_model_module_version":"1.0.0","_model_name":"OutputModel","_view_count":null,"_view_module":"@jupyter-widgets/output","_view_module_version":"1.0.0","_view_name":"OutputView","layout":"IPY_MODEL_5a1830923c874467aedf02b7c7d4c062","msg_id":"","outputs":[{"data":{"text/html":"<pre style=\"white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace\">Sampling 4 chains, 0 divergences <span style=\"color: #008000; text-decoration-color: #008000\">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span> <span style=\"color: #800080; text-decoration-color: #800080\">100%</span> <span style=\"color: #008080; text-decoration-color: #008080\">0:00:00</span> / <span style=\"color: #808000; text-decoration-color: #808000\">0:00:01</span>\n</pre>\n","text/plain":"Sampling 4 chains, 0 divergences \u001b[32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[35m100%\u001b[0m \u001b[36m0:00:00\u001b[0m / \u001b[33m0:00:01\u001b[0m\n"},"metadata":{},"output_type":"display_data"}],"tabbable":null,"tooltip":null}},"1bb8e31da6114c54ac9e0ac725836ae5":{"model_module":"@jupyter-widgets/output","model_module_version":"1.0.0","model_name":"OutputModel","state":{"_dom_classes":[],"_model_module":"@jupyter-widgets/output","_model_module_version":"1.0.0","_model_name":"OutputModel","_view_count":null,"_view_module":"@jupyter-widgets/output","_view_module_version":"1.0.0","_view_name":"OutputView","layout":"IPY_MODEL_b6c03b2f7e2e4803abd5ccd3fe53420b","msg_id":"","outputs":[{"data":{"text/html":"<pre style=\"white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace\">Sampling 4 chains, 0 divergences <span style=\"color: #008000; text-decoration-color: #008000\">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span> <span style=\"color: #800080; text-decoration-color: #800080\">100%</span> <span style=\"color: #008080; text-decoration-color: #008080\">0:00:00</span> / <span style=\"color: #808000; text-decoration-color: #808000\">0:00:05</span>\n</pre>\n","text/plain":"Sampling 4 chains, 0 divergences \u001b[32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[35m100%\u001b[0m \u001b[36m0:00:00\u001b[0m / \u001b[33m0:00:05\u001b[0m\n"},"metadata":{},"output_type":"display_data"}],"tabbable":null,"tooltip":null}},"4b923537334a465db39de5dbcc99f58e":{"model_module":"@jupyter-widgets/output","model_module_version":"1.0.0","model_name":"OutputModel","state":{"_dom_classes":[],"_model_module":"@jupyter-widgets/output","_model_module_version":"1.0.0","_model_name":"OutputModel","_view_count":null,"_view_module":"@jupyter-widgets/output","_view_module_version":"1.0.0","_view_name":"OutputView","layout":"IPY_MODEL_64c689d1b7a4451b9fb6709593ff1e97","msg_id":"","outputs":[{"data":{"text/html":"<pre style=\"white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace\">Sampling 4 chains, 0 divergences <span style=\"color: #008000; text-decoration-color: #008000\">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span> <span style=\"color: #800080; text-decoration-color: #800080\">100%</span> <span style=\"color: #008080; text-decoration-color: #008080\">0:00:00</span> / <span style=\"color: #808000; text-decoration-color: #808000\">0:00:05</span>\n</pre>\n","text/plain":"Sampling 4 chains, 0 divergences \u001b[32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[35m100%\u001b[0m \u001b[36m0:00:00\u001b[0m / \u001b[33m0:00:05\u001b[0m\n"},"metadata":{},"output_type":"display_data"}],"tabbable":null,"tooltip":null}},"4dd12d011253462fbe23b616537411e2":{"model_module":"@jupyter-widgets/base","model_module_version":"2.0.0","model_name":"LayoutModel","state":{"_model_module":"@jupyter-widgets/base","_model_module_version":"2.0.0","_model_name":"LayoutModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"LayoutView","align_content":null,"align_items":null,"align_self":null,"border_bottom":null,"border_left":null,"border_right":null,"border_top":null,"bottom":null,"display":null,"flex":null,"flex_flow":null,"grid_area":null,"grid_auto_columns":null,"grid_auto_flow":null,"grid_auto_rows":null,"grid_column":null,"grid_gap":null,"grid_row":null,"grid_template_areas":null,"grid_template_columns":null,"grid_template_rows":null,"height":null,"justify_content":null,"justify_items":null,"left":null,"margin":null,"max_height":null,"max_width":null,"min_height":null,"min_width":null,"object_fit":null,"object_position":null,"order":null,"overflow":null,"padding":null,"right":null,"top":null,"visibility":null,"width":null}},"5a1830923c874467aedf02b7c7d4c062":{"model_module":"@jupyter-widgets/base","model_module_version":"2.0.0","model_name":"LayoutModel","state":{"_model_module":"@jupyter-widgets/base","_model_module_version":"2.0.0","_model_name":"LayoutModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"LayoutView","align_content":null,"align_items":null,"align_self":null,"border_bottom":null,"border_left":null,"border_right":null,"border_top":null,"bottom":null,"display":null,"flex":null,"flex_flow":null,"grid_area":null,"grid_auto_columns":null,"grid_auto_flow":null,"grid_auto_rows":null,"grid_column":null,"grid_gap":null,"grid_row":null,"grid_template_areas":null,"grid_template_columns":null,"grid_template_rows":null,"height":null,"justify_content":null,"justify_items":null,"left":null,"margin":null,"max_height":null,"max_width":null,"min_height":null,"min_width":null,"object_fit":null,"object_position":null,"order":null,"overflow":null,"padding":null,"right":null,"top":null,"visibility":null,"width":null}},"64c689d1b7a4451b9fb6709593ff1e97":{"model_module":"@jupyter-widgets/base","model_module_version":"2.0.0","model_name":"LayoutModel","state":{"_model_module":"@jupyter-widgets/base","_model_module_version":"2.0.0","_model_name":"LayoutModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"LayoutView","align_content":null,"align_items":null,"align_self":null,"border_bottom":null,"border_left":null,"border_right":null,"border_top":null,"bottom":null,"display":null,"flex":null,"flex_flow":null,"grid_area":null,"grid_auto_columns":null,"grid_auto_flow":null,"grid_auto_rows":null,"grid_column":null,"grid_gap":null,"grid_row":null,"grid_template_areas":null,"grid_template_columns":null,"grid_template_rows":null,"height":null,"justify_content":null,"justify_items":null,"left":null,"margin":null,"max_height":null,"max_width":null,"min_height":null,"min_width":null,"object_fit":null,"object_position":null,"order":null,"overflow":null,"padding":null,"right":null,"top":null,"visibility":null,"width":null}},"6754bf3d69d14e0ba21880f828455187":{"model_module":"@jupyter-widgets/output","model_module_version":"1.0.0","model_name":"OutputModel","state":{"_dom_classes":[],"_model_module":"@jupyter-widgets/output","_model_module_version":"1.0.0","_model_name":"OutputModel","_view_count":null,"_view_module":"@jupyter-widgets/output","_view_module_version":"1.0.0","_view_name":"OutputView","layout":"IPY_MODEL_4dd12d011253462fbe23b616537411e2","msg_id":"","outputs":[{"data":{"text/html":"<pre style=\"white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace\">Sampling 4 chains, 0 divergences <span style=\"color: #008000; text-decoration-color: #008000\">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span> <span style=\"color: #800080; text-decoration-color: #800080\">100%</span> <span style=\"color: #008080; text-decoration-color: #008080\">0:00:00</span> / <span style=\"color: #808000; text-decoration-color: #808000\">0:00:05</span>\n</pre>\n","text/plain":"Sampling 4 chains, 0 divergences \u001b[32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[35m100%\u001b[0m \u001b[36m0:00:00\u001b[0m / \u001b[33m0:00:05\u001b[0m\n"},"metadata":{},"output_type":"display_data"}],"tabbable":null,"tooltip":null}},"9294546db4a944b689ac08a4742f3247":{"model_module":"@jupyter-widgets/base","model_module_version":"2.0.0","model_name":"LayoutModel","state":{"_model_module":"@jupyter-widgets/base","_model_module_version":"2.0.0","_model_name":"LayoutModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"LayoutView","align_content":null,"align_items":null,"align_self":null,"border_bottom":null,"border_left":null,"border_right":null,"border_top":null,"bottom":null,"display":null,"flex":null,"flex_flow":null,"grid_area":null,"grid_auto_columns":null,"grid_auto_flow":null,"grid_auto_rows":null,"grid_column":null,"grid_gap":null,"grid_row":null,"grid_template_areas":null,"grid_template_columns":null,"grid_template_rows":null,"height":null,"justify_content":null,"justify_items":null,"left":null,"margin":null,"max_height":null,"max_width":null,"min_height":null,"min_width":null,"object_fit":null,"object_position":null,"order":null,"overflow":null,"padding":null,"right":null,"top":null,"visibility":null,"width":null}},"aa30d281d8b14eb89e668493dcdc137a":{"model_module":"@jupyter-widgets/base","model_module_version":"2.0.0","model_name":"LayoutModel","state":{"_model_module":"@jupyter-widgets/base","_model_module_version":"2.0.0","_model_name":"LayoutModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"LayoutView","align_content":null,"align_items":null,"align_self":null,"border_bottom":null,"border_left":null,"border_right":null,"border_top":null,"bottom":null,"display":null,"flex":null,"flex_flow":null,"grid_area":null,"grid_auto_columns":null,"grid_auto_flow":null,"grid_auto_rows":null,"grid_column":null,"grid_gap":null,"grid_row":null,"grid_template_areas":null,"grid_template_columns":null,"grid_template_rows":null,"height":null,"justify_content":null,"justify_items":null,"left":null,"margin":null,"max_height":null,"max_width":null,"min_height":null,"min_width":null,"object_fit":null,"object_position":null,"order":null,"overflow":null,"padding":null,"right":null,"top":null,"visibility":null,"width":null}},"ac3c5f4e0f3945b383910360d53a0e67":{"model_module":"@jupyter-widgets/output","model_module_version":"1.0.0","model_name":"OutputModel","state":{"_dom_classes":[],"_model_module":"@jupyter-widgets/output","_model_module_version":"1.0.0","_model_name":"OutputModel","_view_count":null,"_view_module":"@jupyter-widgets/output","_view_module_version":"1.0.0","_view_name":"OutputView","layout":"IPY_MODEL_9294546db4a944b689ac08a4742f3247","msg_id":"","outputs":[{"data":{"text/html":"<pre style=\"white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace\">Sampling 4 chains, 0 divergences <span style=\"color: #008000; text-decoration-color: #008000\">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span> <span style=\"color: #800080; text-decoration-color: #800080\">100%</span> <span style=\"color: #008080; text-decoration-color: #008080\">0:00:00</span> / <span style=\"color: #808000; text-decoration-color: #808000\">0:00:05</span>\n</pre>\n","text/plain":"Sampling 4 chains, 0 divergences \u001b[32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[35m100%\u001b[0m \u001b[36m0:00:00\u001b[0m / \u001b[33m0:00:05\u001b[0m\n"},"metadata":{},"output_type":"display_data"}],"tabbable":null,"tooltip":null}},"b6c03b2f7e2e4803abd5ccd3fe53420b":{"model_module":"@jupyter-widgets/base","model_module_version":"2.0.0","model_name":"LayoutModel","state":{"_model_module":"@jupyter-widgets/base","_model_module_version":"2.0.0","_model_name":"LayoutModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"LayoutView","align_content":null,"align_items":null,"align_self":null,"border_bottom":null,"border_left":null,"border_right":null,"border_top":null,"bottom":null,"display":null,"flex":null,"flex_flow":null,"grid_area":null,"grid_auto_columns":null,"grid_auto_flow":null,"grid_auto_rows":null,"grid_column":null,"grid_gap":null,"grid_row":null,"grid_template_areas":null,"grid_template_columns":null,"grid_template_rows":null,"height":null,"justify_content":null,"justify_items":null,"left":null,"margin":null,"max_height":null,"max_width":null,"min_height":null,"min_width":null,"object_fit":null,"object_position":null,"order":null,"overflow":null,"padding":null,"right":null,"top":null,"visibility":null,"width":null}},"f7d7fbf242924110a8c5868066b43a7c":{"model_module":"@jupyter-widgets/output","model_module_version":"1.0.0","model_name":"OutputModel","state":{"_dom_classes":[],"_model_module":"@jupyter-widgets/output","_model_module_version":"1.0.0","_model_name":"OutputModel","_view_count":null,"_view_module":"@jupyter-widgets/output","_view_module_version":"1.0.0","_view_name":"OutputView","layout":"IPY_MODEL_aa30d281d8b14eb89e668493dcdc137a","msg_id":"","outputs":[{"data":{"text/html":"<pre style=\"white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace\">Sampling 4 chains, 0 divergences <span style=\"color: #008000; text-decoration-color: #008000\">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span> <span style=\"color: #800080; text-decoration-color: #800080\">100%</span> <span style=\"color: #008080; text-decoration-color: #008080\">0:00:00</span> / <span style=\"color: #808000; text-decoration-color: #808000\">0:00:01</span>\n</pre>\n","text/plain":"Sampling 4 chains, 0 divergences \u001b[32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[35m100%\u001b[0m \u001b[36m0:00:00\u001b[0m / \u001b[33m0:00:01\u001b[0m\n"},"metadata":{},"output_type":"display_data"}],"tabbable":null,"tooltip":null}}},"version_major":2,"version_minor":0}
+</script>
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const onCopySuccess = function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  }
+  const getTextToCopy = function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+    text: getTextToCopy
+  });
+  clipboard.on('success', onCopySuccess);
+  if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+    const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+      text: getTextToCopy,
+      container: window.document.getElementById('quarto-embedded-source-code-modal')
+    });
+    clipboardModal.on('success', onCopySuccess);
+  }
+    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+    var mailtoRegex = new RegExp(/^mailto:/);
+      var filterRegex = new RegExp('/' + window.location.host + '/');
+    var isInternal = (href) => {
+        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+    }
+    // Inspect non-navigation links and adorn them if external
+ 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+    for (var i=0; i<links.length; i++) {
+      const link = links[i];
+      if (!isInternal(link.href)) {
+        // undo the damage that might have been done by quarto-nav.js in the case of
+        // links that we want to consider external
+        if (link.dataset.originalHref !== undefined) {
+          link.href = link.dataset.originalHref;
+        }
+      }
+    }
+  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+    const config = {
+      allowHTML: true,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start',
+    };
+    if (contentFn) {
+      config.content = contentFn;
+    }
+    if (onTriggerFn) {
+      config.onTrigger = onTriggerFn;
+    }
+    if (onUntriggerFn) {
+      config.onUntrigger = onUntriggerFn;
+    }
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      if (note) {
+        return note.innerHTML;
+      } else {
+        return "";
+      }
+    });
+  }
+  const xrefs = window.document.querySelectorAll('a.quarto-xref');
+  const processXRef = (id, note) => {
+    // Strip column container classes
+    const stripColumnClz = (el) => {
+      el.classList.remove("page-full", "page-columns");
+      if (el.children) {
+        for (const child of el.children) {
+          stripColumnClz(child);
+        }
+      }
+    }
+    stripColumnClz(note)
+    if (id === null || id.startsWith('sec-')) {
+      // Special case sections, only their first couple elements
+      const container = document.createElement("div");
+      if (note.children && note.children.length > 2) {
+        container.appendChild(note.children[0].cloneNode(true));
+        for (let i = 1; i < note.children.length; i++) {
+          const child = note.children[i];
+          if (child.tagName === "P" && child.innerText === "") {
+            continue;
+          } else {
+            container.appendChild(child.cloneNode(true));
+            break;
+          }
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(container);
+        }
+        return container.innerHTML
+      } else {
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        return note.innerHTML;
+      }
+    } else {
+      // Remove any anchor links if they are present
+      const anchorLink = note.querySelector('a.anchorjs-link');
+      if (anchorLink) {
+        anchorLink.remove();
+      }
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(note);
+      }
+      if (note.classList.contains("callout")) {
+        return note.outerHTML;
+      } else {
+        return note.innerHTML;
+      }
+    }
+  }
+  for (var i=0; i<xrefs.length; i++) {
+    const xref = xrefs[i];
+    tippyHover(xref, undefined, function(instance) {
+      instance.disable();
+      let url = xref.getAttribute('href');
+      let hash = undefined; 
+      if (url.startsWith('#')) {
+        hash = url;
+      } else {
+        try { hash = new URL(url).hash; } catch {}
+      }
+      if (hash) {
+        const id = hash.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note !== null) {
+          try {
+            const html = processXRef(id, note.cloneNode(true));
+            instance.setContent(html);
+          } finally {
+            instance.enable();
+            instance.show();
+          }
+        } else {
+          // See if we can fetch this
+          fetch(url.split('#')[0])
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.getElementById(id);
+            if (note !== null) {
+              const html = processXRef(id, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      } else {
+        // See if we can fetch a full url (with no hash to target)
+        // This is a special case and we should probably do some content thinning / targeting
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const htmlDoc = parser.parseFromString(html, "text/html");
+          const note = htmlDoc.querySelector('main.content');
+          if (note !== null) {
+            // This should only happen for chapter cross references
+            // (since there is no id in the URL)
+            // remove the first header
+            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+              note.children[0].remove();
+            }
+            const html = processXRef(null, note);
+            instance.setContent(html);
+          } 
+        }).finally(() => {
+          instance.enable();
+          instance.show();
+        });
+      }
+    }, function(instance) {
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            div.style.left = 0;
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+        // Handle positioning of the toggle
+    window.addEventListener(
+      "resize",
+      throttle(() => {
+        elRect = undefined;
+        if (selectedAnnoteEl) {
+          selectCodeLines(selectedAnnoteEl);
+        }
+      }, 10)
+    );
+    function throttle(fn, ms) {
+    let throttle = false;
+    let timer;
+      return (...args) => {
+        if(!throttle) { // first call gets through
+            fn.apply(this, args);
+            throttle = true;
+        } else { // all the others get throttled
+            if(timer) clearTimeout(timer); // cancel #2
+            timer = setTimeout(() => {
+              fn.apply(this, args);
+              timer = throttle = false;
+            }, ms);
+        }
+      };
+    }
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+<script>var lightboxQuarto = GLightbox({"closeEffect":"zoom","descPosition":"bottom","loop":false,"openEffect":"zoom","selector":".lightbox"});
+(function() {
+  let previousOnload = window.onload;
+  window.onload = () => {
+    if (previousOnload) {
+      previousOnload();
+    }
+    lightboxQuarto.on('slide_before_load', (data) => {
+      const { slideIndex, slideNode, slideConfig, player, trigger } = data;
+      const href = trigger.getAttribute('href');
+      if (href !== null) {
+        const imgEl = window.document.querySelector(`a[href="${href}"] img`);
+        if (imgEl !== null) {
+          const srcAttr = imgEl.getAttribute("src");
+          if (srcAttr && srcAttr.startsWith("data:")) {
+            slideConfig.href = srcAttr;
+          }
+        }
+      } 
+    });
+  
+    lightboxQuarto.on('slide_after_load', (data) => {
+      const { slideIndex, slideNode, slideConfig, player, trigger } = data;
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(slideNode);
+      }
+    });
+  
+  };
+  
+})();
+          </script>
+
+
+
+
+</body></html>
