@@ -277,13 +277,9 @@ Well we have #3, so let's tackle the others.
 
 The likelihood is a measure of how likely the data are given the model and a set of parameter values. The better fit to the data that a set of parameter values gives, the more we should believe that those paramater values are plausible. We've distilled things down a bit there, as our posterior distribution is influenced by both out prior and likelihood, but that's the intuition.
 
-Luckily for us, our assumptions about the form of the model/data generating process that we specified above give rise to a likelihood. And even luckier for us, when we use typical software to fit our model, 
+Luckily for us, our assumptions about the form of the model/data generating process that we specified above gives rise to a likelihood. And even luckier for us, when we use modern software to specify and fit our model, we can get it without even breaking a sweat. We will use Probabilistic Programming Languages (PPLs) of which there are many options including [`NumPyro`](https://num.pyro.ai/en/latest/index.html), [`Stan`](https://mc-stan.org) and [`PyMC`](https://www.pymc.io/welcome.html). PPLs provide a way to specify Bayesian models and algorithms to fit them.
 
-XX WHAT is a PPL
-
-By using a Probabilistic Programming Language (PPL) like [`NumPyro`](https://num.pyro.ai/en/latest/index.html) to specify our model, we can get this without even breaking a sweat.
-
-If the above paragraphs were confusing, that's okay. We're going to specify it in a code example below which will help. I am going to generate some synthetic data that relates a variable `X` to target `y` with a simple linear relationship plus guassian noise (`np.random.randn`).
+We're going to look at how this works in a code example below (using `NumPyro`) which will hopfully help to illuminate this. I am going to generate some synthetic data that relates a variable `X` to target `y` with a simple linear relationship plus guassian noise (`np.random.randn`).
 
 ```{python}
 # make dummy data for X, then generate y data using:
@@ -292,7 +288,7 @@ X = np.random.randn(100)
 y = 0.1 * X + 0.2 + 0.1 * np.random.randn(100)
 ```
 
-We can specify our linear regression model using a PPL. Then, given some propsed values for the parameters, NumPyro will tell us the log-likelihood for these values given the model and the data. Sweet.
+We can specify a linear regression model using a PPL $y = \beta_0 + \beta_1 x$ and then fit values for $\beta_0$ and $\beta_1$. Given some propsed values for the parameters, `NumPyro` will tell us the log-likelihood for these values given the model and the data. Sweet.
 
 ::: {.callout-note title="Show me the code" appearance="simple" icon=false collapse=true}
 
