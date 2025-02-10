@@ -43,7 +43,7 @@ A comprehensive guide to the theory or practice of Bayesian methods. I'll try re
 We are going to use a great, openly available dataset that describes sandy beach response to offshore storms (as measured by shoreline change). This comes from the excellent paper:
 
 Data-driven modelling of coastal storm erosion for real-time forecasting at a wave-dominated embayed beach (Ibaceta and Harley, 2024)
-https://doi.org/10.1016/j.coastaleng.2024.104596
+[https://doi.org/10.1016/j.coastaleng.2024.104596](https://doi.org/10.1016/j.coastaleng.2024.104596)
 
 In this paper, the authors fit a really nice linear regression to model the storm response. We show here how an equivalent model could be fit with Bayesian methods to show this alternative appraoch and its concepts.
 
@@ -288,7 +288,9 @@ X = np.random.randn(100)
 y = 0.1 * X + 0.2 + 0.1 * np.random.randn(100)
 ```
 
-We can specify a linear regression model using a PPL $y = \beta_0 + \beta_1 x$ and then fit values for $\beta_0$ and $\beta_1$. Given some propsed values for the parameters, `NumPyro` will tell us the log-likelihood for these values given the model and the data. Sweet.
+We can specify a linear regression model:
+$$y = \mathcal{N}\left(\beta_0 + \beta_1 x, \sigma\right)$$
+using a PPL and then fit values for $\beta_0$ and $\beta_1$ (and $\sigma$). Given some propsed values for the parameters, `NumPyro` will tell us the log-likelihood for these values given the model and the data. Sweet.
 
 ::: {.callout-note title="Show me the code" appearance="simple" icon=false collapse=true}
 
@@ -372,7 +374,7 @@ The aim is to give the model a nice wide field to explore but not have it wander
 
 ## Relax and let the machine do its job
 
-Our machine for obtaining samples to build a picture of the posterior distribution for our parameters is going to be Markov Chain Monte Carlo (MCMC). For a great introduction to MCMC please go explore many better sources than I, for example [this lecture](https://youtu.be/rZk2FqX2XnY?si=UpGAmJ3LEGXtGSz-&t=610) from Richard McElreath"s great Statistical Rethinking course.
+Our machine for obtaining samples to build a picture of the posterior distribution for our parameters is going to be Markov Chain Monte Carlo (MCMC). For a great introduction to MCMC please go explore many better sources than I, for example [this lecture](https://youtu.be/rZk2FqX2XnY?si=UpGAmJ3LEGXtGSz-&t=610) from Richard McElreath's great Statistical Rethinking course.
 
 For our purposes and for the rest of this blog we are going to treat the process of obtaining the posterior distribution as a magic. We first specify the data generating process with our model. Then the python implementation of the sampling fairy floats down from the clouds, pries open the chassis of my laptop and greedily feeds on the power being fed to my CPU for a period of seconds to minutes. The gorged fairy, now satiated, waves its magic wand and voilà! Samples from the posterior distribution are delivered into memory, rendered into figures, and subsequently delivered express to our eyeballs.
 
@@ -768,3 +770,4 @@ And so this post was really about laying the foundations for Bayesian hierarchic
 # Reading list
 
 - [Bayesian workflow](https://betanalpha.github.io/assets/case_studies/principled_bayesian_workflow.html)
+- [Statistical Rethinking - Richard McElreath](https://xcelab.net/rm/)
