@@ -262,7 +262,7 @@ Right... how the heck does this help us to fit a model? What does fitting even m
 
 In a Bayesian framework we are not aiming to learn a single set of "true" parameter values for our $\beta$'s and $\sigma$. That would be so very frequentist, and so instead we treat parameters as being probabilistic. It only makes sense to talk about how probable different values are for the parameters and the range of values that are plausible for our model and data. Maybe there's a single true value to be found. Theoretically if we had the perfect model and infinite data... yeah no, that's never going happen when modelling an environment system 🥲. 
 
-There's no reason to get any more into frequentist vs Bayesian approaches, I only bring it up to highlight a key pivot to be made as most people default to frequentist approaches. Both are great, both are useful, both can quantify uncertainty even. But this is a post about Bayes and that'll be that.
+There's no reason to get any more into frequentist vs Bayesian approaches, I only bring it up to highlight a key pivot to be made as a lot of people default to frequentist approaches. Both are great, both are useful, both can quantify uncertainty even. But this is a post about Bayes and that'll be that.
 
 We call the description of probable values for our parameters the posterior distribution. To get to our posterior distribution we follow a process by which we:
 
@@ -277,7 +277,7 @@ Well we have #3, so let's tackle the others.
 
 The likelihood is a measure of how likely the data are given the model and a set of parameter values. The better fit to the data that a set of parameter values gives, the more we should believe that those paramater values are plausible. We've distilled things down a bit there, as our posterior distribution is influenced by both out prior and likelihood, but that's the intuition.
 
-Luckily for us, our assumptions about the form of the model/data generating process that we specified above gives rise to a likelihood. And even luckier for us, when we use modern software to specify and fit our model, we can get it without even breaking a sweat. We will use Probabilistic Programming Languages (PPLs) of which there are many options including [`NumPyro`](https://num.pyro.ai/en/latest/index.html), [`Stan`](https://mc-stan.org) and [`PyMC`](https://www.pymc.io/welcome.html). PPLs provide a way to specify Bayesian models and algorithms to fit them.
+Luckily for us, the model we specified above and our assumptions about the data generating process readily give rise to a likelihood. And even luckier for us, when we use modern software to specify and fit our model, we can get it without even breaking a sweat. We will use Probabilistic Programming Languages (PPLs) of which there are many options including [`NumPyro`](https://num.pyro.ai/en/latest/index.html), [`Stan`](https://mc-stan.org) and [`PyMC`](https://www.pymc.io/welcome.html). PPLs provide a way to specify Bayesian models and algorithms (such as NUTS) to sample and estimate the posterior.
 
 We're going to look at how this works in a code example below (using `NumPyro`) which will hopfully help to illuminate this. I am going to generate some synthetic data that relates a variable `X` to target `y` with a simple linear relationship plus guassian noise (`np.random.randn`).
 
@@ -290,7 +290,7 @@ y = 0.1 * X + 0.2 + 0.1 * np.random.randn(100)
 
 We can specify a linear regression model:
 $$y = \mathcal{N}\left(\beta_0 + \beta_1 x, \sigma\right)$$
-using a PPL and then fit values for $\beta_0$ and $\beta_1$ (and $\sigma$). Given some propsed values for the parameters, `NumPyro` will tell us the log-likelihood for these values given the model and the data. Sweet.
+using a PPL and then fit values for $\beta_0$ and $\beta_1$ (and $\sigma$). Given some propsed values for the parameters, `NumPyro` will tell us the log-likelihood (we use the log for numerical stability) for these values given the model and the data. Sweet.
 
 ::: {.callout-note title="Show me the code" appearance="simple" icon=false collapse=true}
 
@@ -313,7 +313,7 @@ def model(X, y=None):
 
 2. We define the model as a linear regression with an intercept (`beta_0`) and a slope (`beta_1`). `mu` ($\mu$) stores the mean of this model as we defined above i.e., $\mu = \mathbf{X}\mathbf{\beta}$.
 
-3. Finally we tell the model how we think the residuals are distributed about $\mu$. This line is a direct translation of our equation from above $y \sim \mathcal{N}(\mathbf{X} \mathbf{\beta}, \sigma)$.
+3. Finally we tell the model how we think the residuals are distributed about $\mu$. This line is a direct translation of our equation from above $y \sim \mathcal{N}(\mathbf{X} \mathbf{\beta}, \sigma)$. Note: we are making the assumption that our $y$ are independent given the covariates. This is often not the case in timeseries and something to watch out for, but we won't delve deep here.
 
 ```{python}
 #| code-fold: true
@@ -370,7 +370,7 @@ For the graph above: the higher the likelihood the better (hence why you may hav
 
 We are going to talk more about prior distributions below. For now all we need to know is that the model needs us to work hand in hand with it. A Bayesian approach is guiding the model, supporting it and empowering it to achieve a good fit. Infinity is an frighteningly large search space, and without some guidance we are sending our model out in the big wide world all alone. We use prior knowledge to define some reasonable space in which we expect to find plausible values for our parameters. 
 
-The aim is to give the model a nice wide field to explore but not have it wander off a numerical cliff. In environmental science its fairly easy to define what's silly. For example, can a shoreline erode 100,000 m during a single storm event? If it could we'd be in strife so we can pretty safely give very little probability to parameter values that produce such outlandish numbers. We use prior distributions to impart this belief on the model, leaving it then do its own exploration with this information, the data, and the likelihood function.
+The aim is to give the model a nice wide field to explore but not have it wander off a numerical cliff. In environmental science its fairly easy to define what's silly. For example, can a shoreline erode 100,000 m during a single storm event? If it could we'd be in strife so we can pretty safely give very little probability to parameter values that produce such outlandish numbers. We use prior distributions to impart this belief on the model, leaving it then do its own exploration to flesh out the posterior with this information, the data, and the likelihood function.
 
 ## Relax and let the machine do its job
 
@@ -675,6 +675,7 @@ if run_check:
         mod = bmb.Model(
             "dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres",
             df_sub,
+XX
             family = "gaussian"
         )
         fit_raw = mod.fit(
