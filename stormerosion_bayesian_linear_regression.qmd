@@ -1,5 +1,5 @@
 ---
-title: "Fitting a Bayesian linear regression for storm response"
+title: "Fitting a Bayesian linear regression for sandy beach storm response"
 theme: flatly
 from: markdown+emoji
 format:
@@ -14,7 +14,7 @@ execute:
   cache: true
 ---
 
-# Setup
+# Welcome, let's get setup
 
 ## An ode to linear regressions
 
