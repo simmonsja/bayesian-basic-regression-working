@@ -20,7 +20,7 @@ execute:
 
 Good old fashioned, handful of parameters, linear regressions are great!
 
-Don't get me wrong I love fitting larger machine learning (ML) models and when you're after raw predictive power there's nothing better than finally getting that huge neural network singing. But in so many applications where you would employ data-driven models, linear regression models (and variations thereof) can hold their own in performance and often be better suited (more manageable, quicker, more interpretable) to the project as a whole. 
+Don't get me wrong I love fitting larger machine learning (ML) models and when you're after raw predictive power there's nothing better than finally getting that huge neural network singing. But in so many applications where you would employ data-driven models, linear regression models (and variations thereof) can hold their own in performance and often be better suited (more manageable, quicker, more interpretable) to the project as a whole.
 
 There's something very endearing about being able to see all the parameters in your model. A tight knit group that you can call friends when you push that final project deliverable out the door. As ML models get larger, at best they're are filled with acquaintances. More often you're left anxiously gazing into the black-box abyss just hoping to recognise a friendly face.
 
@@ -45,7 +45,7 @@ We are going to use a great, openly available dataset that describes sandy beach
 Data-driven modelling of coastal storm erosion for real-time forecasting at a wave-dominated embayed beach (Ibaceta and Harley, 2024)
 [https://doi.org/10.1016/j.coastaleng.2024.104596](https://doi.org/10.1016/j.coastaleng.2024.104596)
 
-In this paper, the authors fit a really nice linear regression to model the storm response. We show here how an equivalent model could be fit with Bayesian methods to show this alternative appraoch and its concepts.
+In this paper, the authors fit a really nice linear regression to model the storm response. We show here how an equivalent model could be fit with Bayesian methods to show this alternative approach and its concepts.
 
 ::: {.callout-note collapse="true"}
 This is not in any way meant to be knock on the use of a frequentist approach in the above paper. I'll show some of the differences as we go along of course, but the true power of applying Bayesian methods only comes when fitting more complex models which we will see in the next post. I use this paper as the data are freely available, the model is already prepared and has been carefully thought about, and it was an excellent (and clear/well-written) use of data-driven modelling to explore storm erosion!
@@ -57,27 +57,21 @@ Anyway I hear you, "pipe down and show me some data".
 
 ```{python}
 #| include: false
-%load_ext autoreload
-%autoreload 2
-
+# base libraries 
 import os
-# cpu cores for sampling
-os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=4"
-
 import numpy as np
 import pandas as pd
-
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# NumPyro for log likelihood example
+# Bayesian packages and their friends
 import numpyro
 import numpyro.distributions as dist
-
 import arviz as az 
 import xarray as xr
 import bambi as bmb
 
+# My own helper functions
 from functions.plotting import plot_scatter_predictions, fix_forest_plots, plot_scatter_predictions_uncertainty
 from functions.utils import rescale_target, calculate_r2_rmse
 
@@ -96,11 +90,10 @@ The raw data:
 
 ```{python}
 #| echo: false
- 
 # Load data from the github repository for the aforementioned paper
 fn = "https://raw.githubusercontent.com/raiibacetav/data-driven-storm-erosion/refs/heads/main/data.csv"
-raw_data = pd.read_csv(fn, index_col=0)
-# lets take a peek
+raw_data = pd.read_csv(fn, index_col = 0)
+# and take a peek
 display(raw_data.iloc[90:95])
 ```
 
@@ -111,45 +104,50 @@ Alright you sick puppy, welcome to the data wrangling.
 
 ```{python}
 #| output: false
-
-# Define the variables we are interested in
-cases = [ "dW_exposed", "dW_partially", "dW_sheltered"]
-# our covariates and Onset as a sanity check
-id_vars = ["Onset", "Eocum", "WLres", "Tpeak", "Dpo"]
-pre_vars = ["Wpre{}".format(_[2:]) for _ in cases]
+# Define the target variables
+target_variable_names = [ "dW_exposed", "dW_partially", "dW_sheltered"]
+# now our covariates and Onset as a sanity check
+covariate_vars = ["Onset", "Eocum", "WLres", "Tpeak", "Dpo"]
+# and the pre-storm shoreline positions
+prestorm_vars = ["Wpre{}".format(_[2:]) for _ in target_variable_names]
 ```
 
 We are going to make a little format adjustment just to make filtering between locations easier. in this dataset there are three separate locations at which shoreline change was measured at Narrabeen (named here as "exposed", "partially" and "sheltered"). These are provided as columns in the original data, and here we rework the dataframe to have only a single target variable (`dW`) and convert locations into a column as a categorical variable.
 
 ```{python}
-# rework the dataframe
-# take only the columns we need
-df =  raw_data.copy()[id_vars+pre_vars+cases]
+# first take only the columns we need
+df = raw_data[covariate_vars+prestorm_vars+target_variable_names].copy()
 # convert Onset to datetime
-df["Onset"] = pd.to_datetime(df["Onset"], dayfirst=True)
-# we will convert 3 columns into 2 (category and value) by melting, melting - oh what a world
-df = pd.melt(df, id_vars = id_vars + pre_vars, var_name="location", value_name="dW").reset_index(drop=True)
-# we"re going similarly grab the correct prestorm beach position based on the category, the lazy way
-for ii in np.arange(df.shape[0]):
-    df.loc[ii,"Wpre"] = df.loc[ii,"Wpre{}".format(df.loc[ii,"location"][2:])] 
-# drop the now obsolete Wpre columns
-df = df.drop(columns=pre_vars)
+df["Onset"] = pd.to_datetime(df["Onset"], dayfirst = True)
+# we will convert the separate dW location columns into a dW column and a location column
+df = pd.melt(
+    df,
+    id_vars = covariate_vars + prestorm_vars,
+    var_name = "location",
+    value_name = "dW"
+).reset_index(drop=True)
 # lets just remove all the unnecessary dW_ in the variable column
 df["location"] = df["location"].str.replace("dW_","")
-df.sort_values(by=["Onset","location"], inplace=True)
+# we're going similarly grab the correct pre-storm beach position based on the category, the lazy way
+for ii in np.arange(df.shape[0]):
+    df.loc[ii, "Wpre"] = df.loc[ii, "Wpre_{}".format(df.loc[ii,"location"])]
+# and then drop the now obsolete Wpre columns
+df = df.drop(columns = prestorm_vars)
+
+df.sort_values(by = ["Onset", "location"], inplace = True)
 # and lets get rid of any NaNs
-df =  df.dropna().reset_index(drop=True)
+df =  df.dropna().reset_index(drop = True)
 
 display(df.head())
 ```
 
-You should be able to see (e.g., from thhe Wpre column) the 1999-02-05 storm (row 92) correctly flowing from `raw_data` through to `df` below (rows 0 - 2, i.e., three total as there are three locations).
+You should be able to see (e.g., from the Wpre column) the 1999-02-05 storm (row 92 in `raw_data`) correctly flowing from `raw_data` through to `df` below (rows 0 - 2, i.e., three total as there are three locations `exposed`, `partially` and `sheltered`).
 
-We should take this time to scale our covariates, as the authors did too. Of course we could skip this step but you can see that e.g., `Eocum` is orders of magnitude higher than `WLres`. Leaving the data in this state would make it really hard to interpret the coefficients of our model relative to each other for a start. Secondly, model fitting relies on gradients, and these can get whacky if your variables range over orders of magnitude. Be kind. Show your model some TLC and it'll make your life easier in return ([and if you dont believe me...](https://mc-stan.org/docs/stan-users-guide/efficiency-tuning.html#standardizing-predictors)).
+We should take this time to scale our covariates, the authors did too. Of course we could skip this step but you can see that e.g., `Eocum` is orders of magnitude higher than `WLres`. Leaving the data in this state would make it really hard to interpret the coefficients of our model relative to each other for a start. Secondly, our model fitting relies on gradients, and these can get whacky if your variables range over orders of magnitude. Be kind. Show your model some TLC and it'll make your life easier in return ([and if you don't believe me...](https://mc-stan.org/docs/stan-users-guide/efficiency-tuning.html#standardizing-predictors)).
 
 ```{python}
 #| output: false
-# find the max and min of each column - will will normalise as the authors did, by the location
+# find the max and min of each column - we will normalise as the authors did, per location
 scale_max_vals = df.groupby("location").max()
 scale_min_vals = df.groupby("location").min()
 # finally, we normalise each covariate to be between 0 and 1 based on location
@@ -160,7 +158,7 @@ for col in df.columns.drop(["Onset", "location"]):
     # scale the variable
     df[col] = (df[col] - df["scale_min"]) / (df["scale_max"] - df["scale_min"])
     # hide the evidence
-    df = df.drop(columns=["scale_max", "scale_min"])
+    df = df.drop(columns = ["scale_max", "scale_min"])
 ```
 :::
 
@@ -171,7 +169,7 @@ A few moments later... we have our data scaled and in the format we want:
 display(df.head())
 ```
 
-The only conceptually important part of this wrangling was the shift to having the location as a categorical column. Instead of having seperate (e.g.,) `dW` columns for each location, we have a single target variable `dW` and a `location` column that tells us which location the data point is from (so we will now have multiple rows for the same storm event). I am signalling here our modelling intent which you will see come into play below and will put us in the right data frame of mind for more complex modelling.
+The only conceptually important part of this wrangling was the shift to having the location as a categorical column. Instead of having separate (e.g.,) `dW` columns for each location, we have a single target variable `dW` and a `location` column that tells us which location the data point is from (so we will now have multiple rows for the same storm event). I am signalling here our modelling intent which you will see come into play below and will put us in the right data frame of mind for more complex modelling.
 
 ## The model
 
@@ -184,7 +182,7 @@ $$\Delta W = \beta_0 + \beta_1 E_{o,cum} + \beta_2 W_{pre} + \beta_3 D_{po} + \b
 ```{python}
 #| include: false
 # Here seems as good a spot as any to calculate the output of the paper's model
-# coeffs from the paper when I run the fit in the github repo
+# These are the coefficients I get when I run the fit in the github repo released alongside the paper
 coefficients = {
     "exposed": {
         "intercept": 0.100764,
@@ -212,7 +210,7 @@ coefficients = {
     }
 }
 
-# apply to df based on the location column
+# apply these to df based on the location column
 # Function to calculate regression output
 def calculate_regression_output(this_row):
     coeffs = coefficients[this_row["location"]]
@@ -224,10 +222,13 @@ def calculate_regression_output(this_row):
             coeffs["WLres"] * this_row["WLres"])
 
 # apply the function to the dataframe
-df["dW_pred"] = df.apply(calculate_regression_output, axis=1)
+df["dW_pred"] = df.apply(
+    calculate_regression_output,
+    axis = 1
+)
 ```
 
-We have a model that predicts the change in shoreline ($\Delta W$) from the additive combination of our five variables (along with an intecept term $\beta_0$). 
+We have a model that predicts the change in shoreline ($\Delta W$) from the additive combination of our five variables (along with an intercept term $\beta_0$). 
 
 To help us intuit the Bayesian approach to fitting, lets simplify our model. We label our five variables plus intercept collectively as $\mathbf{X}$. The corresponding coefficients that we must fit for each we label collectively as $\mathbf{\beta}$ (see [the here if this notation is unfamiliar](https://en.wikipedia.org/wiki/Linear_regression#Formulation)). 
 
@@ -237,12 +238,12 @@ $$
 \Delta W = \mathbf{X} \mathbf{\beta} + \epsilon
 $$
 
-But we musn't forget to discuss the little red caboose languishing at the end, $\epsilon$. Sometimes it doesn't get the attention of the cars up front, but it's a vital part of the train in any gradient ascent. One way to parse the above would be:
+But we mustn't forget to discuss the little red caboose languishing at the end, $\epsilon$. Sometimes it doesn't get the attention of the cars up front, but it's a vital part of the train in any gradient ascent. One way to parse the above would be:
 
 - $\mathbf{X} \mathbf{\beta}$ describes our model estimating the mean values of $\Delta W$
 - $\epsilon$ describes the residuals or errors of our model when considering our data
 
-In this case we are going to *assume* that our residuals are normally distributed with a standard deviation of $\sigma$ and centered around zero ($\mathcal{N}(0, \sigma)$). Why? This is a good start and a common assumption. Lot of things in nature are gaussian. Plus thinking about the alternatives too hard would lead us into the scary world of generalised linear models, and that's not for us today.
+In this case we are going to *assume* that our residuals are normally distributed with a standard deviation of $\sigma$ and centred around zero ($\mathcal{N}(0, \sigma)$). Why? This is a good start and a common assumption. Lot of things in nature are gaussian. Plus thinking about the alternatives too hard would lead us into the scary world of generalised linear models, and that's not for us today.
 
 Okay so putting words into notation:
 
@@ -269,17 +270,17 @@ We call the description of probable values for our parameters the posterior dist
 1. Specify prior distributions for our parameters (where we think plausible values lie)
 2. Specify a likelihood function that helps us to assess how well the data match model outputs for a given set of parameter values
 3. Observe the data
-4. Use a sampling algorithm to get an updated estimate of plausible parameter values given the data and our model (posqterior distribution)
+4. Use a sampling algorithm to get an updated estimate of plausible parameter values given the data and our model (posterior distribution)
 
 Well we have #3, so let's tackle the others.
 
 ## Likelihood
 
-The likelihood is a measure of how likely the data are given the model and a set of parameter values. The better fit to the data that a set of parameter values gives, the more we should believe that those paramater values are plausible. We've distilled things down a bit there, as our posterior distribution is influenced by both out prior and likelihood, but that's the intuition.
+The likelihood is a measure of how likely the data are given the model and a set of parameter values. The better fit to the data that a set of parameter values gives, the more we should believe that those parameter values are plausible. We've distilled things down a bit there, as our posterior distribution is influenced by both out prior and likelihood, but that's the intuition.
 
 Luckily for us, our assumptions about the form of the model/data generating process that we specified above gives rise to a likelihood. And even luckier for us, when we use modern software to specify and fit our model, we can get it without even breaking a sweat. We will use Probabilistic Programming Languages (PPLs) of which there are many options including [`NumPyro`](https://num.pyro.ai/en/latest/index.html), [`Stan`](https://mc-stan.org) and [`PyMC`](https://www.pymc.io/welcome.html). PPLs provide a way to specify Bayesian models and algorithms to fit them.
 
-We're going to look at how this works in a code example below (using `NumPyro`) which will hopfully help to illuminate this. I am going to generate some synthetic data that relates a variable `X` to target `y` with a simple linear relationship plus guassian noise (`np.random.randn`).
+We're going to look at how this works in a code example below (using `NumPyro`) which will hopefully help to illuminate this. I am going to generate some synthetic data that relates a variable `X` to target `y` with a simple linear relationship plus gaussian noise (`np.random.randn`).
 
 ```{python}
 # make dummy data for X, then generate y data using:
@@ -290,9 +291,12 @@ y = 0.1 * X + 0.2 + 0.1 * np.random.randn(100)
 
 We can specify a linear regression model:
 $$y = \mathcal{N}\left(\beta_0 + \beta_1 x, \sigma\right)$$
+
 using a PPL and then fit values for $\beta_0$ and $\beta_1$ (and $\sigma$). Given some propsed values for the parameters, `NumPyro` will tell us the log-likelihood for these values given the model and the data. Sweet.
 
 ::: {.callout-note title="Show me the code" appearance="simple" icon=false collapse=true}
+
+What you'll see below is how to specify this type of model in `NumPyro`. Don't get too hung up on this. We will be using `Bambi` below and I'll leave the proper explanation of `NumPyro` to a separate post.
 
 ```{python}
 # build a simple model for this in NumPyro
@@ -306,7 +310,7 @@ def model(X, y=None):
     # store the model prediction before we account for the error # <2>
     numpyro.deterministic("mu", mu) # <2>
     # and then finally sample so we can compare to our observations
-    numpyro.sample("y_out", dist.Normal(mu, sigma), obs=y)  # <3>
+    numpyro.sample("y_out", dist.Normal(mu, sigma), obs = y)  # <3>
 ```
 
 1. The first few lines define the prior distrbituions for the parameters in our model - explained in Section 2.2 below.
@@ -325,7 +329,7 @@ proposed_values = {
     "beta_1" : np.array([0.1, 0.2, 0.05, 0.11, 0.09, 0, -0.1, 0.15, 0.2, 0.3]),
     "sigma" : np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
 }
-# get the log likihood
+# get the log likelihood
 loglik = numpyro.infer.util.log_likelihood(
     model = model, 
     posterior_samples = proposed_values,
@@ -339,26 +343,44 @@ You can see below that fits (i.e., values for our parameters) that lie closer to
 
 ```{python}
 #| echo: false
-
 # plot the predicted line of each of the proposed solutions coloured by the log likelihood and the data
-fig, ax = plt.subplots(figsize=(5,3.5))
-ax.scatter(X, y, color="black", s=1)
+fig, ax = plt.subplots(figsize = (5, 3.5))
+ax.scatter(X, y, color = "black", s = 1)
 
 # Get the min and max log likelihood values
-vmin = loglik["y_out"].mean(axis=1).min()
-vmax = loglik["y_out"].mean(axis=1).max()
+vmin = loglik["y_out"].mean(axis = 1).min()
+vmax = loglik["y_out"].mean(axis = 1).max()
 
 for i in range(len(loglik["y_out"])):
-    # and weight the width of the line by the log likelihood
-    ax.plot(X, X * proposed_values["beta_1"][i] + proposed_values["beta_0"][i], color=plt.cm.viridis((loglik["y_out"][i].mean() - vmin) / (vmax - vmin)), alpha=0.75, lw=2)
+    # plot the line
+    ax.plot(
+        X,
+        X * proposed_values["beta_1"][i] + proposed_values["beta_0"][i],
+        color = plt.cm.viridis(
+            (loglik["y_out"][i].mean() - vmin) / (vmax - vmin)
+        ),
+        alpha = 0.75,
+        lw = 2
+    )
 
-ax.set_xlabel("X", fontsize=14)
-ax.set_ylabel("y", fontsize=14)
-ax.grid(True, which="both", linestyle="--", linewidth=0.5, color="lightgrey")
+ax.set_xlabel("X", fontsize = 14)
+ax.set_ylabel("y", fontsize = 14)
+ax.grid(
+    True,
+    which = "both",
+    linestyle = "--",
+    linewidth = 0.5,
+    color = "lightgrey"
+)
 
-sm = plt.cm.ScalarMappable(cmap="viridis", norm=plt.Normalize(vmin=vmin, vmax=vmax))
+sm = plt.cm.ScalarMappable(
+    cmap = "viridis",
+    norm = plt.Normalize(vmin = vmin, vmax = vmax)
+)
 sm.set_array([])
-fig.colorbar(sm, ax=ax, label="log-likelihood")
+fig.colorbar(
+    sm, ax = ax, label = "log-likelihood"
+)
 plt.show()
 ```
 
@@ -378,11 +400,6 @@ Our machine for obtaining samples to build a picture of the posterior distributi
 
 For our purposes and for the rest of this blog we are going to treat the process of obtaining the posterior distribution as a magic. We first specify the data generating process with our model. Then the python implementation of the sampling fairy floats down from the clouds, pries open the chassis of my laptop and greedily feeds on the power being fed to my CPU for a period of seconds to minutes. The gorged fairy, now satiated, waves its magic wand and voilà! Samples from the posterior distribution are delivered into memory, rendered into figures, and subsequently delivered express to our eyeballs.
 
-::: {.callout-tip collapse="true"}
-## Tip
-The blood of the CPU will keep you alive, even if you're an inch from death, but at a terrible price...
-:::
-
 Of course, I should mention that we pay the flashy uncertainty bands et al. of a Bayesian fit with a (mostly very modest) computational cost. Sometimes this cost can sneak up on you for more complex models, but for a lot of problems in the environmental space the time difference is small/manageable on modern compute. I've skimmed through enough articles to know attention spans are shorter than ever, or something to that effect, but surely we can spare a extra seconds to give our model a glow up.
 
 # Back to business
@@ -398,7 +415,7 @@ For `Bambi` to work its magic, we need to supply it with a structure for the mod
 
 ```{python}
 #| output: false
-# define our model
+# define our model - a smoothie mixing all locations into one
 mod_smoothie = bmb.Model(
         formula = "dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres", # <1>
         data = df, # <2>
@@ -416,9 +433,9 @@ mod_smoothie = bmb.Model(
 
 # tell Bambi to draw samples using MCMC
 fit_smoothie = mod_smoothie.fit( # <5>
-    draws = 2000, # <5>
-    idata_kwargs=dict(log_likelihood = True) # <5>
+    draws = 2000 # <5>
 ) # <5>
+
 # and make predcictions (added to fit_smoothie)
 mod_smoothie.predict(fit_smoothie, kind = "response") # <6>
 ```
@@ -431,39 +448,39 @@ mod_smoothie.predict(fit_smoothie, kind = "response") # <6>
 
 4. The next part is specifies the form of the residuals if you want to think about it that way, or the final part in the data generating process modelling the distribution of observations given the model as we saw above. This defines our likelihood again as discussed above. 
 
-5. Now lets fit the model, letting the sampling fairy do its work to take 2000 samples from the posterior using MCMC
+5. Now lets fit the model, letting the sampling fairy do its work to take 2000 samples from the posterior using MCMC.
 
-6. Last of all we make predictions on the data using the model so that we can compare the fit to Figure 8 of the paper and check we haven't stuffed anything up
+6. Last of all we make predictions on the data using the model so that we can compare the fit to Figure 8 of the paper and check we haven't stuffed anything up.
 
 Oh you're so close to seeing a model fit, but following a [good Bayesian workflow](https://doi.org/10.48550/arXiv.2011.01808) we're going to check our priors first. Remember we set out with the goal of merely shaving the edges off infinity to a sensible range. Lets wee how we did. Luckily `Bambi` provides a convenience function (`.plot_priors()`) for this. You can see first of all in practice how much weight we are giving various values, as we said above telling the model we are quite sure the values lie between -2 and 2.
 
 ```{python}
 # plot the prior distributions themselves 
-mod_smoothie.plot_priors(figsize=(9, 8))
+mod_smoothie.plot_priors(figsize = (9, 8))
 # and sample from the priors to get predictions
 prior_pred = mod_smoothie.prior_predictive()
 ```
 
-You can see the second convenience function we used in the code above, `prior_predictive()`. This is kind of cool. Because of our conceptualisation of the model as representing a data generating process we can simulate observations straight off the bat using only our priors. So we can see below that for the top 10 storms, our prior model predicts values of shoreline change will be less than 1000s of meters. Our model predicts a mean of around 0 and the coloured bars show the 89% confidence intervals for our predictions (more on this below). So again, we're not being too restrictive and we definitely cover all the reasonable parameter values. However, we've helped the sampler into a reasonable search space.
+You can see the second convenience function we used in the code above, `prior_predictive()`. This is kind of cool. Because of our conceptualisation of the model as representing a data generating process we can simulate observations straight off the bat using only our priors. So we can see below that for the top 10 storms, our prior model predicts values of shoreline change will be less than 1000s of meters. Our model predicts a mean of around 0 and the coloured bars show the 89% credible intervals for our predictions (more on this below). So again, we're not being too restrictive and we definitely cover all the reasonable parameter values. However, we've helped the sampler into a reasonable search space.
 
 ```{python}
 #| echo: false
 # lets lazily and in an ugly fashion get our predictions
+# I use arviz to get the uncertainty 
 plot_df = pd.DataFrame({
-    "dW": df["dW"],
-    "dW_pred_mean": prior_pred.prior["mu"].mean(dim=["chain", "draw"]).values,
-    "dW_pred_median": prior_pred.prior["mu"].median(dim=["chain", "draw"]).values,
-    "dW_pred_hdi_lower": az.hdi(prior_pred.prior["mu"], hdi_prob=0.89)["mu"].sel(hdi="lower").values,
-    "dW_pred_hdi_higher": az.hdi(prior_pred.prior["mu"], hdi_prob=0.89)["mu"].sel(hdi="higher").values,
-    "dW_obs_hdi_lower": az.hdi(prior_pred.prior_predictive["dW"], hdi_prob=0.89)["dW"].sel(hdi="lower").values,
-    "dW_obs_hdi_higher": az.hdi(prior_pred.prior_predictive["dW"], hdi_prob=0.89)["dW"].sel(hdi="higher").values,
-    "location": df["location"],
-    "dW_paper": df["dW_pred"]
+    "dW": df["dW"], # observed
+    "dW_pred_mean": prior_pred.prior["mu"].mean(dim = ["chain", "draw"]).values, # mean prediction
+    "dW_pred_hdi_lower": az.hdi(prior_pred.prior["mu"], hdi_prob = 0.89)["mu"].sel(hdi = "lower").values, # lower 89% CI
+    "dW_pred_hdi_higher": az.hdi(prior_pred.prior["mu"], hdi_prob = 0.89)["mu"].sel(hdi = "higher").values, # upper 89% CI
+    "dW_obs_hdi_lower": az.hdi(prior_pred.prior_predictive["dW"], hdi_prob = 0.89)["dW"].sel(hdi = "lower").values, # lower 89% CI
+    "dW_obs_hdi_higher": az.hdi(prior_pred.prior_predictive["dW"], hdi_prob = 0.89)["dW"].sel(hdi = "higher").values, # upper 89% CI
+    "location": df["location"], # location
+    "dW_paper": df["dW_pred"] # paper predictions
 })
 
-plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals, target_appends=["", "_paper", "_pred_mean", "_pred_median", "_pred_hdi_lower", "_pred_hdi_higher", "_obs_hdi_lower", "_obs_hdi_higher"])
+plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals, target_appends = ["", "_paper", "_pred_mean", "_pred_median", "_pred_hdi_lower", "_pred_hdi_higher", "_obs_hdi_lower", "_obs_hdi_higher"])
 
-plot_scatter_predictions_uncertainty(plot_df, target_append="_pred_mean", title = "Prior predictive check")
+plot_scatter_predictions_uncertainty(plot_df, target_append = "_pred_mean", title = "Prior predictive check")
 ```
 
 And now we come to our beautiful posterior distributions which we can examine using the `arviz` package.
@@ -471,7 +488,7 @@ And now we come to our beautiful posterior distributions which we can examine us
 ```{python}
 ax1 = az.plot_forest(
     fit_smoothie,
-    var_names=["~sigma", "~mu"],
+    var_names = ["~sigma", "~mu"],
     combined = True,
     hdi_prob = 0.89,
     figsize = (5, 4)
@@ -480,7 +497,7 @@ fix_forest_plots(ax1[0])
 plt.show()
 ```
 
-Okay we have some $\beta$s now. You can read the paper if you want the indepth analysis, but broadly for example for this model we see shoreline change is most strongly associated with $E_{o,cum}$, with higher offshore wave energy producing more erosion on average. We can see that we are quite uncertain as to the effect of $WL_{res}$ with the confidence intervals straddling zero (note: for this model).
+Okay we have some $\beta$s now. You can read the paper if you want the indepth analysis, but broadly for example for this model we see shoreline change is most strongly associated with $E_{o,cum}$, with higher offshore wave energy producing more erosion on average. We can see that we are quite uncertain as to the effect of $WL_{res}$ with the credible intervals straddling zero (note: for this model).
 
 While we won't cover it here, `arviz` provides excellent diagnostics for viewing the sampling traces and checking for convergence. This can be really useful if things are going wrong with your model, Bayes will typically be quite transparent when you've messed up. While this can sometime lead to hours/days of hair pulling trying to get complex models working, I think that a tendency not to silently fail is a real strength. Good friends have the courage to tell you when you've made a mistake.
 
@@ -505,7 +522,7 @@ Finally, saving the best until last - lets plot the predicitons of the model vs 
 # plot the mean prediction of the model against the observed data
 plot_df = pd.DataFrame({
     "dW": df["dW"],
-    "dW_pred": fit_smoothie.posterior["mu"].mean(dim=["chain", "draw"]).values,
+    "dW_pred": fit_smoothie.posterior["mu"].mean(dim = ["chain", "draw"]).values,
     "location": df["location"],
     "dW_paper": df["dW_pred"]
 })
@@ -515,9 +532,9 @@ plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals)
 # calculate the R2 for each of dW_pred and dW_paper per location
 r2_scores, rmse_scores = calculate_r2_rmse(plot_df)
 
-plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_paper", title = "Paper predictions")
+plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_paper", title = "Paper predictions")
 
-plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_pred", title = "Bayesian predictions")
+plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_pred", title = "Bayesian predictions")
 ```
 
 Looking good, particularly for the partially sheltered location. But we are not matching the paper predictions and the keen eyed reader will understand why. We fit the model with no reference to the different locations. Our data have heterogeneity - different responses to the same storm event at different locations. What we've fit is one parameter to rule them all (per variable).
@@ -532,8 +549,8 @@ This we can call a group level intercept, i.e., a different intercept for each o
 
 ```{python}
 #| output: false
-# fit the location smoothie model
-mod_int_smoothie = bmb.Model(
+# fit the group level intercept location smoothie model
+mod_glint_smoothie = bmb.Model(
         "dW ~ 0 + location + Eocum + Wpre + Dpo + Tpeak + WLres", # <1>
         df, 
         priors = {
@@ -543,17 +560,16 @@ mod_int_smoothie = bmb.Model(
             "Dpo": bmb.Prior("Normal", mu = 0, sigma = 1),
             "Tpeak": bmb.Prior("Normal", mu = 0, sigma = 1),
             "WLres": bmb.Prior("Normal", mu = 0, sigma = 1),
-            "sigma": bmb.Prior("HalfNormal", sigma=10)
+            "sigma": bmb.Prior("HalfNormal", sigma = 2)
         },
         family = "gaussian"
     )
 # sampling fairy do your thing
-fit_int_smoothie = mod_int_smoothie.fit(
-    draws = 2000,
-    idata_kwargs=dict(log_likelihood = True)
+fit_glint_smoothie = mod_glint_smoothie.fit(
+    draws = 2000
 )
-# and make predcictions (added to fit_int_smoothie)
-mod_int_smoothie.predict(fit_int_smoothie, kind = "response")
+# and make predictions (added to fit_glint_smoothie)
+mod_glint_smoothie.predict(fit_glint_smoothie, kind = "response")
 ```
 
 1. Note that we have updated the model now to have `location` (a factor) as a variable. This will create one intercept per location. We also add `0 +` to indicate to the model that we don't want an overall intercept term. This would be unidentfiable as it could equally have a value or be abosrbed into the location intercepts.
@@ -563,9 +579,9 @@ Lets see the difference to our old "smoothie" model where we simply blended the 
 ```{python}
 #| echo: false
 az.plot_forest(
-    [fit_smoothie, fit_int_smoothie],
-    var_names=["~sigma", "~mu"],
-    model_names=["Smoothie", "Location intercept"],
+    [fit_smoothie, fit_glint_smoothie],
+    var_names = ["~sigma", "~mu"],
+    model_names = ["Smoothie", "Location intercept"],
     combined = True,
     hdi_prob = 0.89,
     figsize = (5, 6)
@@ -580,9 +596,9 @@ Hey! Nice, you can see from the forest plot that the estimates for each paramete
 # plot the mean prediction of the model against the observed data
 plot_df = pd.DataFrame({
     "dW": df["dW"],
-    "dW_pred": fit_int_smoothie.posterior["mu"].mean(dim=["chain", "draw"]).values,
+    "dW_pred": fit_glint_smoothie.posterior["mu"].mean(dim = ["chain", "draw"]).values,
     "location": df["location"],
-    "dW_paper": fit_smoothie.posterior["mu"].mean(dim=["chain", "draw"]).values
+    "dW_paper": fit_smoothie.posterior["mu"].mean(dim = ["chain", "draw"]).values
 })
 
 plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals)
@@ -590,9 +606,9 @@ plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals)
 # calculate the R2 for each of dW_pred and dW_paper per location
 r2_scores, rmse_scores = calculate_r2_rmse(plot_df)
 
-plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_paper", title = "Bayesian smoothie predictions")
+plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_paper", title = "Bayesian smoothie predictions")
 
-plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_pred", title = "Bayesian intercept predictions")
+plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_pred", title = "Bayesian intercept predictions")
 ```
 
 We've lifted our performance a fair bit at the exposed location and a little at the sheltered location. This is nothing to scoff at, we explain a lot of the variability with common regression terms at all locations and a group level intercept. It's a nice model, and really this results is not unexpected. Beaches erode during storms, to varying degrees depending on the location, but we can expect that the physical drivers of shoreline change have similar effects along a single embayed beach such as this.
@@ -608,9 +624,19 @@ At least this is true at the level at which we are describing our processes. The
 And so we bestow upon each location it's own $\beta$ parameters for each covariate which can be fit by the model. Luckily our data are in a format that will make this very easy as we started to do above. If we specify to the model it needs three parameters for each $\beta$, we can use the corresponding $\beta$s for each data point depending on its location. We tell this to `Bambi` with the following formula:
 
 ```{python}
-mod_factors = bmb.Model(
+# fit the model separate parameters per location
+mod_separate = bmb.Model(
     "dW ~ 0 + location + Eocum:location + Wpre:location + Dpo:location + Tpeak:location + WLres:location", # <1>
     df,
+    priors = {
+        "location": bmb.Prior("Normal", mu = 0, sigma = 1),
+        "Eocum": bmb.Prior("Normal", mu = 0, sigma = 1),
+        "Wpre": bmb.Prior("Normal", mu = 0, sigma = 1),
+        "Dpo": bmb.Prior("Normal", mu = 0, sigma = 1),
+        "Tpeak": bmb.Prior("Normal", mu = 0, sigma = 1),
+        "WLres": bmb.Prior("Normal", mu = 0, sigma = 1),
+        "sigma": bmb.Prior("HalfNormal", sigma = 2)
+    },
     family = "gaussian"
 )
 ```
@@ -619,30 +645,30 @@ mod_factors = bmb.Model(
 
 ```{python}
 #| include: false
-fit_factors_raw = mod_factors.fit(
-    draws = 2000,
-    idata_kwargs=dict(log_likelihood = True)
+# sample
+fit_separate_raw = mod_separate.fit(
+    draws = 2000
 )
 # add the predictions
-mod_factors.predict(fit_factors_raw, kind = "response")
+mod_separate.predict(fit_separate_raw, kind = "response")
 ```
 
 ```{python}
 #| include: false
 # rename location to Intercept
-fit_factors = fit_factors_raw.copy()
-fit_factors.posterior = fit_factors_raw.posterior.rename({"location": "Intercept"})
+fit_separate = fit_separate_raw.copy()
+fit_separate.posterior = fit_separate_raw.posterior.rename({"location": "Intercept"})
 
 # add new coord "location" = "location_dim"
-fit_factors = fit_factors.assign_coords({"location": fit_factors.posterior["location_dim"].values})
+fit_separate = fit_separate.assign_coords({"location": fit_separate.posterior["location_dim"].values})
 
-fit_factors.posterior["Intercept"] = fit_factors.posterior["Intercept"].rename({"location_dim": "location"})
+fit_separate.posterior["Intercept"] = fit_separate.posterior["Intercept"].rename({"location_dim": "location"})
 
 # now change Dpo, Eocum, Tqw1    peak, WLres, Wpre to have dimensions (chain, draw, location)
 for var in ["Dpo:location", "Eocum:location", "Tpeak:location", "WLres:location", "Wpre:location"]:
-    fit_factors.posterior[var] = fit_factors.posterior[var].rename({var.split(":")[0]+":location_dim": "location"})
+    fit_separate.posterior[var] = fit_separate.posterior[var].rename({var.split(":")[0]+":location_dim": "location"})
 
-    fit_factors.posterior = fit_factors.posterior.rename({var: var.split(":")[0]})
+    fit_separate.posterior = fit_separate.posterior.rename({var: var.split(":")[0]})
 ```
 
 Lets look at our beautiful posterior distributions.
@@ -650,9 +676,9 @@ Lets look at our beautiful posterior distributions.
 ```{python}
 #| echo: false
 az.plot_forest(
-    [fit_factors, fit_smoothie],
-    var_names=["~sigma", "~mu"],
-    model_names=["Per location", "Smoothie"],
+    [fit_separate, fit_smoothie],
+    var_names = ["~sigma", "~mu"],
+    model_names = ["Per location", "Smoothie"],
     combined = True,
     hdi_prob = 0.89,
     figsize = (5, 8)
@@ -667,7 +693,7 @@ I really like these plots, we see how the locations differ from each other in sm
 run_check = False
 
 if run_check:
-    # A check on the assumptions of shared sigma - factors vs indiv fit 
+    # A check on the assumptions of shared sigma - separate in one model vs indiv fit 
     fit = []
     for location in df["location"].unique():
         # subset df to be only location
@@ -685,8 +711,9 @@ if run_check:
     fit = xr.concat([_ for _ in fit], dim = "location")
 
     az.plot_forest(
-        [fit, fit_factors, fit_smoothie],
-        var_names=["~sigma", "~mu"],
+        [fit, fit_separate, fit_smoothie],
+        model_names = ["Separate sigma", "Separate", "Smoothie"],
+        var_names = ["~sigma", "~mu"],
         combined = True,
         hdi_prob = 0.89,
         figsize = (5, 8)
@@ -700,7 +727,7 @@ Once more we plot the predictions and compare back to the paper to check that we
 # plot the mean prediction of the model against the observed data
 plot_df = pd.DataFrame({
     "dW": df["dW"],
-    "dW_pred": fit_factors_raw.posterior["mu"].mean(dim=["chain", "draw"]).values,
+    "dW_pred": fit_separate_raw.posterior["mu"].mean(dim = ["chain", "draw"]).values,
     "location": df["location"],
     "dW_paper": df["dW_pred"]
 })
@@ -710,9 +737,9 @@ plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals)
 # calculate the R2 for each of dW_pred and dW_paper per location
 r2_scores, rmse_scores = calculate_r2_rmse(plot_df)
 
-plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_paper", title = "Paper predictions")
+plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_paper", title = "Paper predictions")
 
-plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append="_pred", title = "Bayesian factors predictions")
+plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_pred", title = "Bayesian factors predictions")
 ```
 
 ::: {.callout-note title="Model comparison example" appearance="simple" icon=false collapse=true}
@@ -722,9 +749,9 @@ We can compare the models (aiming for a higher elpd_loo value) using `az.compare
 # Compare loo for the three models
 az.compare(
     {
-        "factors": fit_factors_raw,
+        "separate": fit_separate_raw,
         "smoothie": fit_smoothie,
-        "int_smoothie": fit_int_smoothie
+        "glint_smoothie": fit_glint_smoothie
     }
 )
 ```
@@ -739,22 +766,22 @@ As we discussed up top, we fit this model using an approach that embraced uncert
 # lets lazily and in an ugly fashion get our predictions
 plot_df = pd.DataFrame({
     "dW": df["dW"],
-    "dW_pred_mean": fit_factors_raw.posterior["mu"].mean(dim=["chain", "draw"]).values,
-    "dW_pred_hdi_lower": az.hdi(fit_factors_raw.posterior["mu"], hdi_prob=0.89)["mu"].sel(hdi="lower").values,
-    "dW_pred_hdi_higher": az.hdi(fit_factors_raw.posterior["mu"], hdi_prob=0.89)["mu"].sel(hdi="higher").values,
-    "dW_obs_hdi_lower": az.hdi(fit_factors_raw.posterior_predictive["dW"], hdi_prob=0.89)["dW"].sel(hdi="lower").values,
-    "dW_obs_hdi_higher": az.hdi(fit_factors_raw.posterior_predictive["dW"], hdi_prob=0.89)["dW"].sel(hdi="higher").values,
+    "dW_pred_mean": fit_separate_raw.posterior["mu"].mean(dim = ["chain", "draw"]).values,
+    "dW_pred_hdi_lower": az.hdi(fit_separate_raw.posterior["mu"], hdi_prob = 0.89)["mu"].sel(hdi = "lower").values,
+    "dW_pred_hdi_higher": az.hdi(fit_separate_raw.posterior["mu"], hdi_prob = 0.89)["mu"].sel(hdi = "higher").values,
+    "dW_obs_hdi_lower": az.hdi(fit_separate_raw.posterior_predictive["dW"], hdi_prob = 0.89)["dW"].sel(hdi = "lower").values,
+    "dW_obs_hdi_higher": az.hdi(fit_separate_raw.posterior_predictive["dW"], hdi_prob = 0.89)["dW"].sel(hdi = "higher").values,
     "location": df["location"],
     "dW_paper": df["dW_pred"]
 })
 
-plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals, target_appends=["", "_paper", "_pred_mean", "_pred_hdi_lower", "_pred_hdi_higher", "_obs_hdi_lower", "_obs_hdi_higher"])
+plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals, target_appends = ["", "_paper", "_pred_mean", "_pred_hdi_lower", "_pred_hdi_higher", "_obs_hdi_lower", "_obs_hdi_higher"])
 
-plot_scatter_predictions_uncertainty(plot_df, target_append="_pred_mean", title = "Bayesian factors predictions")
+plot_scatter_predictions_uncertainty(plot_df, target_append="_pred_mean", title  =  "Bayesian factors predictions")
 
 ```
 
-We have plot the top 10 largest storm events and the predictions from our model with uncertainty. The mean is plot again as the dot in the middle, but now with two extra lines representing the 89% confidence intervals. Why two you ask? 
+We have plot the top 10 largest storm events and the predictions from our model with uncertainty. The mean is plot again as the dot in the middle, but now with two extra lines representing the 89% credible intervals. Why two you ask? 
 
 - the blue line represents our parameter uncertainty, the range of predictions of average response coming out of our model ($\mu$). As you have seen above we don't quite know the value of each parameter and so we present the range of possible model fits that are plausible given the data and model structure.
 - however, we expect (and fit our model with the assumption) that our actual observations are normally distributed about our average model prediction ($\mu$), with some standard deviation $\sigma$. The orange line represents this and gives the 89% prediction interval of where we expect our data points to lie, given that both our model is imperfect and we have measurement noise.
