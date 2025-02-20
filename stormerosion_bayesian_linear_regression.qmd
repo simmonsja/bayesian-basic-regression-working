@@ -73,7 +73,7 @@ import bambi as bmb
 
 # My own helper functions
 from functions.plotting import plot_scatter_predictions, fix_forest_plots, plot_scatter_predictions_uncertainty
-from functions.utils import rescale_target, calculate_r2_rmse
+from functions.utils import calculate_r2_rmse, extract_model_predictions, rescale_target
 
 np.random.seed(2319)
 ```
@@ -292,7 +292,7 @@ y = 0.1 * X + 0.2 + 0.1 * np.random.randn(100)
 We can specify a linear regression model:
 $$y = \mathcal{N}\left(\beta_0 + \beta_1 x, \sigma\right)$$
 
-using a PPL and then fit values for $\beta_0$ and $\beta_1$ (and $\sigma$). Given some propsed values for the parameters, `NumPyro` will tell us the log-likelihood for these values given the model and the data. Sweet.
+using a PPL and then fit values for $\beta_0$ and $\beta_1$ (and $\sigma$). Given some proposed values for the parameters, `NumPyro` will tell us the log-likelihood for these values given the model and the data. Sweet.
 
 ::: {.callout-note title="Show me the code" appearance="simple" icon=false collapse=true}
 
@@ -465,25 +465,16 @@ You can see the second convenience function we used in the code above, `prior_pr
 
 ```{python}
 #| echo: false
-# lets lazily and in an ugly fashion get our predictions
-# I use arviz to get the uncertainty 
-plot_df = pd.DataFrame({
-    "dW": df["dW"], # observed
-    "dW_pred_mean": prior_pred.prior["mu"].mean(dim = ["chain", "draw"]).values, # mean prediction
-    "dW_pred_hdi_lower": az.hdi(prior_pred.prior["mu"], hdi_prob = 0.89)["mu"].sel(hdi = "lower").values, # lower 89% CI
-    "dW_pred_hdi_higher": az.hdi(prior_pred.prior["mu"], hdi_prob = 0.89)["mu"].sel(hdi = "higher").values, # upper 89% CI
-    "dW_obs_hdi_lower": az.hdi(prior_pred.prior_predictive["dW"], hdi_prob = 0.89)["dW"].sel(hdi = "lower").values, # lower 89% CI
-    "dW_obs_hdi_higher": az.hdi(prior_pred.prior_predictive["dW"], hdi_prob = 0.89)["dW"].sel(hdi = "higher").values, # upper 89% CI
-    "location": df["location"], # location
-    "dW_paper": df["dW_pred"] # paper predictions
-})
-
-plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals, target_appends = ["", "_paper", "_pred_mean", "_pred_median", "_pred_hdi_lower", "_pred_hdi_higher", "_obs_hdi_lower", "_obs_hdi_higher"])
-
-plot_scatter_predictions_uncertainty(plot_df, target_append = "_pred_mean", title = "Prior predictive check")
+# lets get our predictions
+# arviz.hdi used to calculate uncertainty intervals
+plot_pred_df = extract_model_predictions(
+    prior_pred, df, scale_min_vals, scale_max_vals, prior = True, hdi = 0.89
+)
+# and plot 'em
+plot_scatter_predictions_uncertainty(plot_pred_df, target_append = "_pred_mean", title = "Prior predictive check")
 ```
 
-And now we come to our beautiful posterior distributions which we can examine using the `arviz` package.
+And now we come to our beautiful posterior distributions which we can examine using the `arviz` package. The posterior distributions are shown for each of our variables along the y axis. Our 89% credible intervals are shown, as well as the interquartile range slightly bolder, and the median value shown with a dot.
 
 ```{python}
 ax1 = az.plot_forest(
@@ -515,7 +506,7 @@ az.rhat(fit_smoothie)
 ```
 :::
 
-Finally, saving the best until last - lets plot the predicitons of the model vs the data and compare to the paper to make sure we are on the right track.
+Finally, saving the best until last - lets plot the predictions of the model vs the data and compare to the paper to make sure we are on the right track.
 
 ```{python}
 #| echo: false
@@ -534,7 +525,7 @@ r2_scores, rmse_scores = calculate_r2_rmse(plot_df)
 
 plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_paper", title = "Paper predictions")
 
-plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_pred", title = "Bayesian predictions")
+plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_pred", title = "Bayesian smoothie predictions")
 ```
 
 Looking good, particularly for the partially sheltered location. But we are not matching the paper predictions and the keen eyed reader will understand why. We fit the model with no reference to the different locations. Our data have heterogeneity - different responses to the same storm event at different locations. What we've fit is one parameter to rule them all (per variable).
@@ -578,7 +569,7 @@ Lets see the difference to our old "smoothie" model where we simply blended the 
 
 ```{python}
 #| echo: false
-az.plot_forest(
+ax1 = az.plot_forest(
     [fit_smoothie, fit_glint_smoothie],
     var_names = ["~sigma", "~mu"],
     model_names = ["Smoothie", "Location intercept"],
@@ -586,6 +577,7 @@ az.plot_forest(
     hdi_prob = 0.89,
     figsize = (5, 6)
 )
+fix_forest_plots(ax1[0])
 plt.show()
 ```
 
@@ -608,7 +600,7 @@ r2_scores, rmse_scores = calculate_r2_rmse(plot_df)
 
 plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_paper", title = "Bayesian smoothie predictions")
 
-plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_pred", title = "Bayesian intercept predictions")
+plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_pred", title = "Bayesian group level intercept predictions")
 ```
 
 We've lifted our performance a fair bit at the exposed location and a little at the sheltered location. This is nothing to scoff at, we explain a lot of the variability with common regression terms at all locations and a group level intercept. It's a nice model, and really this results is not unexpected. Beaches erode during storms, to varying degrees depending on the location, but we can expect that the physical drivers of shoreline change have similar effects along a single embayed beach such as this.
@@ -626,7 +618,8 @@ And so we bestow upon each location it's own $\beta$ parameters for each covaria
 ```{python}
 # fit the model separate parameters per location
 mod_separate = bmb.Model(
-    "dW ~ 0 + location + Eocum:location + Wpre:location + Dpo:location + Tpeak:location + WLres:location", # <1>
+    "dW ~ 0 + location + Eocum:location + Wpre:location + \
+    Dpo:location + Tpeak:location + WLres:location", # <1>
     df,
     priors = {
         "location": bmb.Prior("Normal", mu = 0, sigma = 1),
@@ -655,16 +648,18 @@ mod_separate.predict(fit_separate_raw, kind = "response")
 
 ```{python}
 #| include: false
-# rename location to Intercept
+# we have to align this to our other models and right now location is used as our intercept and will be used to differentiate our parameters down the track
+# so we need to do some xarray magic and rename
+ 
+# first rename location to Intercept
 fit_separate = fit_separate_raw.copy()
 fit_separate.posterior = fit_separate_raw.posterior.rename({"location": "Intercept"})
 
 # add new coord "location" = "location_dim"
 fit_separate = fit_separate.assign_coords({"location": fit_separate.posterior["location_dim"].values})
-
 fit_separate.posterior["Intercept"] = fit_separate.posterior["Intercept"].rename({"location_dim": "location"})
 
-# now change Dpo, Eocum, Tqw1    peak, WLres, Wpre to have dimensions (chain, draw, location)
+# now change Dpo, Eocum, Tpeak, WLres, Wpre to have dimensions (chain, draw, location)
 for var in ["Dpo:location", "Eocum:location", "Tpeak:location", "WLres:location", "Wpre:location"]:
     fit_separate.posterior[var] = fit_separate.posterior[var].rename({var.split(":")[0]+":location_dim": "location"})
 
@@ -675,7 +670,7 @@ Lets look at our beautiful posterior distributions.
 
 ```{python}
 #| echo: false
-az.plot_forest(
+ax1 = az.plot_forest(
     [fit_separate, fit_smoothie],
     var_names = ["~sigma", "~mu"],
     model_names = ["Per location", "Smoothie"],
@@ -683,6 +678,7 @@ az.plot_forest(
     hdi_prob = 0.89,
     figsize = (5, 8)
 )
+fix_forest_plots(ax1[0])
 plt.show()
 ```
 
@@ -701,7 +697,15 @@ if run_check:
         mod = bmb.Model(
             "dW ~ 1 + Eocum + Wpre + Dpo + Tpeak + WLres",
             df_sub,
-XX
+            priors = {
+                "location": bmb.Prior("Normal", mu = 0, sigma = 1),
+                "Eocum": bmb.Prior("Normal", mu = 0, sigma = 1),
+                "Wpre": bmb.Prior("Normal", mu = 0, sigma = 1),
+                "Dpo": bmb.Prior("Normal", mu = 0, sigma = 1),
+                "Tpeak": bmb.Prior("Normal", mu = 0, sigma = 1),
+                "WLres": bmb.Prior("Normal", mu = 0, sigma = 1),
+                "sigma": bmb.Prior("HalfNormal", sigma = 2)
+            },
             family = "gaussian"
         )
         fit_raw = mod.fit(
@@ -740,23 +744,8 @@ r2_scores, rmse_scores = calculate_r2_rmse(plot_df)
 
 plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_paper", title = "Paper predictions")
 
-plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_pred", title = "Bayesian factors predictions")
+plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_pred", title = "Bayesian separate parameters predictions")
 ```
-
-::: {.callout-note title="Model comparison example" appearance="simple" icon=false collapse=true}
-We can compare the models (aiming for a higher elpd_loo value) using `az.compare` and see that each step we took improved the model.
-
-```{python}
-# Compare loo for the three models
-az.compare(
-    {
-        "separate": fit_separate_raw,
-        "smoothie": fit_smoothie,
-        "glint_smoothie": fit_glint_smoothie
-    }
-)
-```
-::: 
 
 # Predicting with uncertainty
 
@@ -764,22 +753,12 @@ As we discussed up top, we fit this model using an approach that embraced uncert
 
 ```{python}
 #| echo: false
-# lets lazily and in an ugly fashion get our predictions
-plot_df = pd.DataFrame({
-    "dW": df["dW"],
-    "dW_pred_mean": fit_separate_raw.posterior["mu"].mean(dim = ["chain", "draw"]).values,
-    "dW_pred_hdi_lower": az.hdi(fit_separate_raw.posterior["mu"], hdi_prob = 0.89)["mu"].sel(hdi = "lower").values,
-    "dW_pred_hdi_higher": az.hdi(fit_separate_raw.posterior["mu"], hdi_prob = 0.89)["mu"].sel(hdi = "higher").values,
-    "dW_obs_hdi_lower": az.hdi(fit_separate_raw.posterior_predictive["dW"], hdi_prob = 0.89)["dW"].sel(hdi = "lower").values,
-    "dW_obs_hdi_higher": az.hdi(fit_separate_raw.posterior_predictive["dW"], hdi_prob = 0.89)["dW"].sel(hdi = "higher").values,
-    "location": df["location"],
-    "dW_paper": df["dW_pred"]
-})
-
-plot_df = rescale_target(plot_df, scale_min_vals, scale_max_vals, target_appends = ["", "_paper", "_pred_mean", "_pred_hdi_lower", "_pred_hdi_higher", "_obs_hdi_lower", "_obs_hdi_higher"])
-
-plot_scatter_predictions_uncertainty(plot_df, target_append="_pred_mean", title  =  "Bayesian factors predictions")
-
+# get the predictions
+plot_df = extract_model_predictions(
+    fit_separate_raw, df, scale_min_vals, scale_max_vals, prior = False, hdi = 0.89
+)
+# plot 'em
+plot_scatter_predictions_uncertainty(plot_df, target_append = "_pred_mean", title = "Bayesian separate parameters predictions")
 ```
 
 We have plot the top 10 largest storm events and the predictions from our model with uncertainty. The mean is plot again as the dot in the middle, but now with two extra lines representing the 89% credible intervals. Why two you ask? 
