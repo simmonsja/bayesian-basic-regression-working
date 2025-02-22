@@ -11,7 +11,7 @@ format:
     fig-height: 6
 editor: source
 execute:
-  cache: true
+  cache: false
 ---
 
 # Welcome, let's get setup
