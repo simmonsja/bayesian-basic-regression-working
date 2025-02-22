@@ -551,9 +551,9 @@ But don't worry I've got you, dawg. We set the data up at the start to make it r
 
 ## A dash more complexity
 
-As a next step, we could consider that the three locations respond in the same way to storms, but have a different average response. For example, we think that $E_{o,cum}$ is always going to be a large driver of shoreline change, with the same sign correlation (positive or negative) at each location. But that our predicted shoreline change for an average storm would be different when looking at a part of the beach that is sheltered/partially sheltered/exposed.
+As a next step, we could consider that the three locations respond in the same way to storms, but have a different average response. For example, we may think that the relationship between $E_{o,cum}$ and shoreline change, will be strongly positive (XX) at all locations. But that our predicted shoreline change for an average storm would be different when looking at a part of the beach that is sheltered/partially sheltered/exposed.
 
-This we can call a group level intercept, i.e., a different intercept for each of our three locations which form the different groups in our dataset.
+This different mean response we can call a group level intercept, i.e., a different intercept for each of the three locations which form the different groups in our dataset.
 
 ```{python}
 #| output: false
@@ -580,7 +580,7 @@ fit_glint_smoothie = mod_glint_smoothie.fit(
 mod_glint_smoothie.predict(fit_glint_smoothie, kind = "response")
 ```
 
-1. Note that we have updated the model now to have `location` (a factor) as a variable. This will create one intercept per location. We also add `0 +` to indicate to the model that we don't want an overall intercept term. This would be unidentfiable as it could equally have a value or be abosrbed into the location intercepts.
+1. Note that we have updated the model now to have `location` (a factor) as a variable. This will create one intercept per location. We also add `0 +` to indicate to the model that we don't want an overall intercept term. This would be unidentfiable as it could equally have its own value or be abosrbed into the location intercepts.
 
 Lets see the difference to our old "smoothie" model where we simply blended the locations together.
 
@@ -620,7 +620,7 @@ plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_pape
 plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_pred", title = "Bayesian group level intercept predictions")
 ```
 
-We've lifted our performance a fair bit at the exposed location and a little at the sheltered location. This is nothing to scoff at, we explain a lot of the variability with common regression terms at all locations and a group level intercept. It's a nice model, and really this results is not unexpected. Beaches erode during storms, to varying degrees depending on the location, but we can expect that the physical drivers of shoreline change have similar effects along a single embayed beach such as this.
+We've lifted our performance a fair bit at the exposed location and a little at the sheltered location. This is nothing to scoff at, we explain a lot of the variability with common regression terms at all locations and a group level intercept. It's a nice model, and really this result not unexpected. Beaches erode during storms, to varying degrees depending on the location, but we can expect that the physical drivers of shoreline change have similar effects along a single embayed beach.
 
 Just like that we have stumbled into the the beginnings of a hierarchical model here, by a loose definition. Some parameters share information from the various groupings in the data and some are found seperately per group. We can get a little bit smarter about how we do this, in time...
 
