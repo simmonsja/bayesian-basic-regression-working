@@ -362,7 +362,7 @@ loglik = numpyro.infer.util.log_likelihood(
 ```
 :::
 
-You can see below that fits (i.e., values for our parameters) that lie closer to our true model parameters ($0.1 * x + 0.2$) have higher log-likelihoods. As we would expect right, they fit the data better. So there we have it, a method for assessing goodness of fit, we're well on our way to a posterior. And much of the hard work done for us, goodee.
+You can see below that fits (i.e., values for our parameters) that lie closer to our true model parameters ($0.1 * x + 0.2$) have higher log-likelihoods. As we would expect right, they fit the data better. So there we have it, a method for assessing goodness of fit. We're well on our way to a posterior with much of the hard work having been done for us, goodee.
 
 ```{python}
 #| echo: false
