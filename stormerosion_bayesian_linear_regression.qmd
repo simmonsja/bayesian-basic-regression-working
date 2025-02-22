@@ -474,6 +474,8 @@ You're so close now to seeing model output, but following a [good Bayesian workf
 ```{python}
 # plot the prior distributions themselves 
 mod_smoothie.plot_priors(figsize = (9, 8))
+# make things a little less cosy
+plt.subplots_adjust(hspace = 0.5)
 # and sample from the priors to get predictions
 prior_pred = mod_smoothie.prior_predictive()
 ```
@@ -501,6 +503,9 @@ ax1 = az.plot_forest(
     hdi_prob = 0.89,
     figsize = (5, 4)
 )
+```
+```{python}
+#| echo: false
 fix_forest_plots(ax1[0])
 plt.show()
 ```
@@ -589,7 +594,7 @@ Lets see the difference to our old "smoothie" model where we simply blended the 
 ax1 = az.plot_forest(
     [fit_smoothie, fit_glint_smoothie],
     var_names = ["~sigma", "~mu"],
-    model_names = ["Smoothie", "Location intercept"],
+    model_names = ["Smoothie", "Group level\nintercept"],
     combined = True,
     hdi_prob = 0.89,
     figsize = (5, 6)
@@ -635,8 +640,8 @@ And so we bestow upon each location its own $\beta$s for each covariate. Luckily
 ```{python}
 # fit the model separate parameters per location
 mod_separate = bmb.Model(
-    "dW ~ 0 + location + Eocum:location + Wpre:location + \
-    Dpo:location + Tpeak:location + WLres:location", # <1>
+    "dW ~ 0 + location + Eocum:location + Wpre:location +" + # <1>
+    "Dpo:location + Tpeak:location + WLres:location", # <1>
     df,
     priors = {
         "location": bmb.Prior("Normal", mu = 0, sigma = 1),
@@ -652,6 +657,16 @@ mod_separate = bmb.Model(
 ```
 
 1. We are now specifying each variable to have one parameter per location with the `:location` syntax. If you don't believe me, look below to the forest plots and beg forgiveness for your ever having doubted me.
+
+To be clear, the model we are now fitting could be put into our above notation. We are saying for each observation $i$ we select the appropriate $\beta$ value based on the corresponding location $loc_{[i]}$:
+
+$$
+\begin{aligned}
+\Delta W_{[i]} &= \beta_{0,loc_{[i]}} + \beta_{1,loc_{[i]}} E_{o,cum[i]} + \beta_{2,loc_{[i]}} W_{pre[i]} +
+\\
+&\beta_{3,loc_{[i]}} D_{po[i]} + \beta_{4,loc_{[i]}} T_{p,peak[i]} + \beta_{5,loc_{[i]}} WL_{res[i]} + \epsilon
+\end{aligned}
+$$
 
 ```{python}
 #| include: false
@@ -690,7 +705,7 @@ Lets look at our beautiful posterior distributions.
 ax1 = az.plot_forest(
     [fit_separate, fit_smoothie],
     var_names = ["~sigma", "~mu"],
-    model_names = ["Per location", "Smoothie"],
+    model_names = ["Separate per\nlocation", "Smoothie"],
     combined = True,
     hdi_prob = 0.89,
     figsize = (5, 8)
@@ -761,12 +776,12 @@ r2_scores, rmse_scores = calculate_r2_rmse(plot_df)
 
 plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_paper", title = "Paper predictions")
 
-plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_pred", title = "Bayesian separate parameters predictions")
+plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_pred", title = "Bayesian separate parameters per location predictions")
 ```
 
-# Predicting with uncertainty
+# Prediction in an uncertain world
 
-As we discussed up top, we fit this model using an approach that embraced uncertainty at its core. We should make sure we are utilising that for prediction. Above I've been wasteful, throwing our posterior into the trash compactor to come up with a mean prediction for each point. But it doesn't have to be this way, we value the posterior and the information contained therein, so lets summarise it and display it below.
+As we discussed up top, we have fit this model using an approach that embraced uncertainty at its core. We should make sure we are utilising that when presenting our predictions. Above I've been wasteful, throwing our posterior into the trash compactor to come up with a mean prediction for each point. But it doesn't have to be this way, we value the posterior and the information contained therein, so lets summarise it and display it below.
 
 ```{python}
 #| echo: false
@@ -781,18 +796,18 @@ plot_scatter_predictions_uncertainty(plot_df, target_append = "_pred_mean", titl
 We have plot the top 10 largest storm events and the predictions from our model with uncertainty. The mean is plot again as the dot in the middle, but now with two extra lines representing the 89% credible intervals. Why two you ask? 
 
 - the blue line represents our parameter uncertainty, the range of predictions of average response coming out of our model ($\mu$). As you have seen above we don't quite know the value of each parameter and so we present the range of possible model fits that are plausible given the data and model structure.
-- however, we expect (and fit our model with the assumption) that our actual observations are normally distributed about our average model prediction ($\mu$), with some standard deviation $\sigma$. The orange line represents this and gives the 89% prediction interval of where we expect our data points to lie, given that both our model is imperfect and we have measurement noise.
+- however, we expect (and in fact explicitly made the assumption) that our actual observations are normally distributed about our average model prediction ($\mu$), with some standard deviation $\sigma$. The orange line represents this and gives the 89% prediction interval of where we expect our actual data points to lie, given that both our model is imperfect and we have measurement noise.
 
 # We did it
 
-And there we have it, a Bayesian linear fit prediction uncertainty. If you're left with an empty feeling, "all that for some blue and papaya lines and a smug new philosophical approach to model fitting?", that's okay. I'd argue that it by default more plainly lays out the relative confidence we have in each of the terms included in our model, which can only be helpful in scientific context. But I get it. 
+And there we have it, a Bayesian linear fit with uncertainty. I hope you've been able to see that once you get your head around the concepts, the implmentation in code is quite approachable. If you've already heard of Bayesian methods and have been covinced that they could help in your analyses, then off you go, good luck to you.
 
-But you ain't seen nothing yet. The real power of Bayes comes from the ability of this workflow to scale to much, much more complex models. The extra degree of freedom given by the prior, allows us to fully describe our beliefs about the data in a way that we only glimpsed in this example.
+If, however, you're left with an empty feeling, "all that for some blue and papaya lines and a smug new philosophical approach to model fitting?", that's okay. I'd argue that it (by default) more plainly lays out the relative confidence we have in each of the terms included in our model, which can only be helpful in scientific context. But I get it. You ain't seen nothing yet though. The real power of Bayes comes from the ability of this workflow to scale to much, much more complex models. The extra degree of freedom given by the prior, allows us to fully describe our beliefs about the data in a way that we only glimpsed in this example.
 
-And so this post was really about laying the foundations for Bayesian hierarchical models. You saw when we fit the model altogether with the three locations, we actually got some great results. There is a lot of shared information in how a beach responds to storms within a fairly narrow geographical area. Hierarchical models help us to leverage these commonalities, whilst respecting subtle and important differences. And in doing so these models will help us avoid the worst of the demons that lurk in data-driven modelling.
+And so this post has served to lay the foundations for Bayesian hierarchical models. You saw when we fit the model with all three locations together, we actually got some great results. There is a lot of shared information in how a beach responds to storms within a fairly narrow geographical area. Hierarchical models help us to leverage these commonalities, whilst respecting subtle and important differences. And in doing so these models may help us avoid the worst of the demons that lurk in data-driven models.
 
-# Reading list
+# Some reading
 
-- [Bayesian workflow](https://betanalpha.github.io/assets/case_studies/principled_bayesian_workflow.html)
 - [Statistical Rethinking - Richard McElreath](https://xcelab.net/rm/)
 - [Regression and Other Stories by Gelman, Hill and Vehtari](https://users.aalto.fi/~ave/ROS.pdf)
+- [Bayesian workflow](https://betanalpha.github.io/assets/case_studies/principled_bayesian_workflow.html)
