@@ -545,7 +545,7 @@ plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_pape
 plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_pred", title = "Bayesian smoothie predictions")
 ```
 
-Looking good, particularly for the partially sheltered location. But we are not matching the paper predictions and the keen eyed reader will understand why. We fit the model giving it no information about which data points belonged to different locations. Our data have heterogeneity - different responses to the same storm event at different locations. What we've fit is one parameter to rule them all (per variable).
+Looking good, particularly for the partially sheltered location. But we are not matching the paper predictions and the keen eyed reader will understand why. We fit the model giving it no information about which data points belonged to different locations. Our data have heterogeneity - different responses to the same storm event at different locations. What we've fit is one parameter to rule them all (per variable). Blended all the locations into one smoothie.
 
 But don't worry I've got you, dawg. We set the data up at the start to make it really easy to build model complexity for just this scenario (whilst keeping the ability to extend into hierarchical models later on).
 
@@ -622,15 +622,15 @@ plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_pred
 
 We've lifted our performance a fair bit at the exposed location and a little at the sheltered location. This is nothing to scoff at, we explain a lot of the variability with common regression terms at all locations and a group level intercept. It's a nice model, and really this result not unexpected. Beaches erode during storms, to varying degrees depending on the location, but we can expect that the physical drivers of shoreline change have similar effects along a single embayed beach.
 
-Just like that we have stumbled into the the beginnings of a hierarchical model here, by a loose definition. Some parameters share information from the various groupings in the data and some are found seperately per group. We can get a little bit smarter about how we do this, in time...
+Just like that we have stumbled into the the beginnings of a hierarchical model here, by a loose definition. Some parameters share information from the various groupings in the data and some are informed seperately per group. We can get a little bit smarter about how we do this, in time...
 
-Instead, let's do this model justice and return to fitting the way the authors intended, just Bayesian. There are three locations and, as the authors identified, there are small but important differences in the response behaviours at these locations. 
+For now though, let's do this model justice and return to fitting the way the authors intended. Only Bayesian this time. There are three locations and, as the authors identified, there are small but important differences in the response behaviours at these locations. 
 
 ::: {.callout-note title="Coarse sand graining" appearance="simple" icon=false collapse=true}
-At least this is true at the level at which we are describing our processes. There is no difference in the fundamental physics at each location. Quarks be quarks and do quark stuff no matter where they are found on the beach. And perhaps physics based models might resolve the processes down to the level that it can represent the different observed behaviours without resorting to tuning parameter values at each (though IMHO this has been way too hard to achieve with any of these sorts of models that I've worked with). But definitely at the coarse grained level we are describing the processes at with our simple linear model, we expect the parameter fits to be different at each location which will have different responses to the same offshore storm.
+At least this is true at the level at which we are describing our processes. There is no difference in the fundamental physics at each location. Quarks be quarks and do quark stuff no matter where they are found on the beach. And perhaps physics based models might resolve the processes down to a level that can replicate the different observed behaviours without resorting to tuning parameter values separately at each location (though IMHO this has been too hard to achieve with any of these sorts of models that I've worked with). Definitely though at the coarse grained level we are describing the processes at with our simple linear model, we expect the parameter fits to be different at each location to describe the different magnitudes of response to the same offshore storms.
 :::
 
-And so we bestow upon each location it's own $\beta$ parameters for each covariate which can be fit by the model. Luckily our data are in a format that will make this very easy as we started to do above. If we specify to the model it needs three parameters for each $\beta$, we can use the corresponding $\beta$s for each data point depending on its location. We tell this to `Bambi` with the following formula:
+And so we bestow upon each location its own $\beta$s for each covariate. Luckily our data are in a format that will make this very easy as we started to do above. If we specify to the model that it needs three parameters for each $\beta$, we can use the corresponding $\beta$s for each data point depending on its location. We tell this to `Bambi` with the following formula:
 
 ```{python}
 # fit the model separate parameters per location
