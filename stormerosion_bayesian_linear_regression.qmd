@@ -362,7 +362,7 @@ loglik = numpyro.infer.util.log_likelihood(
 ```
 :::
 
-You can see below that fits (i.e., values for our parameters) that lie closer to our true model parameters ($0.1 * x + 0.2$) have higher log-likelihoods. As we would expect right, they fit the data better. So there we have it, a method for assessing goodness of fit, we're well on our way to a posterior. And much of the hard work done for us, goodee.
+You can see below that candidate models with parameter values that lie closer to our true model parameters ($0.1 * x + 0.2$) have higher log-likelihoods. As we would expect right, they fit the data better. So there we have it, a method for assessing goodness of fit, we're well on our way to a posterior. And much of the hard work done for us, goodee.
 
 ```{python}
 #| echo: false
@@ -413,22 +413,22 @@ For the graph above: the higher the likelihood the better (hence why you may hav
 
 ## Relax and let the machine do its job
 
-Our machine for obtaining samples to build a picture of the posterior distribution for our parameters is going to be Markov Chain Monte Carlo (MCMC). For a great introduction to MCMC please go explore many better sources than I, for example [this lecture](https://youtu.be/rZk2FqX2XnY?si=UpGAmJ3LEGXtGSz-&t=610) from Richard McElreath's great Statistical Rethinking course.
+Our machine for obtaining samples and building a picture of the posterior distribution for our parameters is going to be Markov Chain Monte Carlo (MCMC). For a great introduction to MCMC please go explore many better sources than this, for example [this lecture](https://youtu.be/rZk2FqX2XnY?si=UpGAmJ3LEGXtGSz-&t=610) from Richard McElreath's great Statistical Rethinking course.
 
-For our purposes and for the rest of this blog we are going to treat the process of obtaining the posterior distribution as a magic. We first specify the data generating process with our model. Then the python implementation of the sampling fairy floats down from the clouds, pries open the chassis of my laptop and greedily feeds on the power being fed to my CPU for a period of seconds to minutes. The gorged fairy, now satiated, waves its magic wand and voilà! Samples from the posterior distribution are delivered into memory, rendered into figures, and subsequently delivered express to our eyeballs.
+For our purposes though, and for the rest of this blog, we are going to treat the process of obtaining the posterior distribution as magic. We first specify our priors and the data generating process with our model. Then the python implementation of the sampling fairy floats down from the clouds, pries open the chassis of my laptop and greedily feeds on the power being fed to the CPU for a period of seconds to minutes. The gorged fairy, now satiated, waves its magic wand and voilà! Samples from the posterior distribution are delivered into memory, rendered into figures, and subsequently delivered express to our eyeballs.
 
-Of course, I should mention that we pay the flashy uncertainty bands et al. of a Bayesian fit with a (mostly very modest) computational cost. Sometimes this cost can sneak up on you for more complex models, but for a lot of problems in the environmental space the time difference is small/manageable on modern compute. I've skimmed through enough articles to know attention spans are shorter than ever, or something to that effect, but surely we can spare a extra seconds to give our model a glow up.
+Of course, I should mention that we pay for this approach of representing parameters as distributions instead of a single value. The Bayesian fit will give us flashy uncertainty bands et al. but for a (mostly modest) computational cost. Sometimes this cost can sneak up on you for more complex models, but for a lot of problems in the environmental space the time difference is manageable on modern compute. I've skimmed through enough articles to know attention spans are shorter than ever, but surely we can spare a few extra seconds to give our model a glow up.
 
 # Back to business
 
 ## A location smoothie
 
-Now what we maybe have a little bit more of an intuition about how we fit the model in Bayes and get the elusive posterior distribution, let's turn back to our original example. We're going to look at how to mix the ingredients ready for sampling using the [`Bambi` package](https://bambinos.github.io/bambi/). `Bambi` relies on the `PyMC` package as the underlying PPL to construct the model and sample from the posterior distribution.
+We've now built a little more intuition about how we fit the model in Bayes and estimate the elusive posterior distribution. So let's turn back to our original example. We're going to look at how to mix the ingredients ready for sampling using the [`Bambi` package](https://bambinos.github.io/bambi/). `Bambi` relies on the `PyMC` package as the underlying PPL (see Section 2) to construct the model and sample from the posterior distribution.
 
-For `Bambi` to work its magic, we need to supply it with a structure for the model that that:
+For `Bambi` to work its magic, we need to:
 
-- describes the parameters in our model and specifies prior distributions for each (though `Bambi` will adopt some default priors if you're lazy)
-- specifies the model that, given the data and the parameters, estimates the target (y)
+- describe the parameters in our model and give prior distributions for each (though `Bambi` will adopt some default priors if you're feeling lucky)
+- specify the model that, given the data and the parameters, estimates the target (y)
 
 ```{python}
 #| output: false
@@ -457,19 +457,19 @@ fit_smoothie = mod_smoothie.fit( # <5>
 mod_smoothie.predict(fit_smoothie, kind = "response") # <6>
 ```
 
-1. This is the model itself. It specifies the same equation we saw above naming all of the columns of the data (from `df` that we will use), `Bambi` implictly then fits a $\beta$ term per covariate. We have defined how we expect the input to be related to the output (in this case via a simple additive linear model). 
+1. This is the model itself. It's the same equation we saw above refering to the columns of the data (from the `df` data frame that we will use). `Bambi` then infers it must fit a $\beta$ term per covariate (plus an intercept by default). We have defined how we expect the input to be related to the output (in this case via a simple additive linear model). 
 
 2. Models, oh how they covet data.
 
-3. Really the specification of the prior is the main new part from what the authors did in their paper. Here we list each of our parameters (or the variables with corresponding $\beta$ parameters), and tell the model a space in which we expect to find the plausible values for these parameters. Here we won't think to hard about this, how about something close to we are 68% sure that our paramaeter values lie between -1 and 1, 95% sure they're between -2 and 2. Ths corresponds to a prior of $\beta \sim \mathcal{N}(0, 1)$. We have one other type of prior we used, and that is the `HalfNormal` prior for $\sigma$. $\sigma$ is a little special compared to the other parameters and that's because it cannot be negative. A normal distribution with negative standard deviation doesn't make sense. So in this case we use smile meditation and a half normal prior (bounded at 0) to enforce positivity.
+3. Really the specification of the prior is the main new part from what the authors did in their paper. Here we list each of our parameters (by naming the variables with corresponding $\beta$ parameters), and tell the model a space in which we expect to find the plausible values for these parameters. Here we won't think to hard about this, how about this: we place 68% probability on our paramaeter values being between -1 and 1, 95% between -2 and 2. Ths corresponds to a prior of $\beta \sim \mathcal{N}(0, 1)$. We have one other type of prior we used, and that is the `HalfNormal` prior for $\sigma$. $\sigma$ is a little special compared to the other parameters and that's because it cannot be negative. Why? Well simply a normal distribution with negative standard deviation doesn't make sense. So in this case we use a half normal prior (bounded at 0) to enforce positivity.
 
-4. The next part is specifies the form of the residuals if you want to think about it that way, or the final part in the data generating process modelling the distribution of observations given the model as we saw above. This defines our likelihood again as discussed above. 
+4. The next part specifies the form of the residuals if you want to think about it that way, or the final part in the data generating process modelling the distribution of observations given the model as we saw above. This defines our likelihood and we make a gaussian assumption as discussed above.
 
 5. Now lets fit the model, letting the sampling fairy do its work to take 2000 samples from the posterior using MCMC.
 
-6. Last of all we make predictions on the data using the model so that we can compare the fit to Figure 8 of the paper and check we haven't stuffed anything up.
+6. Last of all we make predictions on the data using the model so that we can compare our Bayesian model fit to Figure 8 of the paper and check we haven't stuffed anything up.
 
-Oh you're so close to seeing a model fit, but following a [good Bayesian workflow](https://doi.org/10.48550/arXiv.2011.01808) we're going to check our priors first. Remember we set out with the goal of merely shaving the edges off infinity to a sensible range. Lets wee how we did. Luckily `Bambi` provides a convenience function (`.plot_priors()`) for this. You can see first of all in practice how much weight we are giving various values, as we said above telling the model we are quite sure the values lie between -2 and 2.
+You're so close now to seeing model output, but following a [good Bayesian workflow](https://doi.org/10.48550/arXiv.2011.01808) we're going to check our priors first. Remember we set out with the goal of merely shaving the edges off infinity to give a sensible range for the model to consider. Lets wee how we did. Luckily `Bambi` provides a convenience functions to this end. We plot the priors for each parameter first with `.plot_priors()`. You can see in practice how much weight we are giving various values, as we said above telling the model we are quite sure the values lie between -2 and 2.
 
 ```{python}
 # plot the prior distributions themselves 
@@ -478,7 +478,7 @@ mod_smoothie.plot_priors(figsize = (9, 8))
 prior_pred = mod_smoothie.prior_predictive()
 ```
 
-You can see the second convenience function we used in the code above, `prior_predictive()`. This is kind of cool. Because of our conceptualisation of the model as representing a data generating process we can simulate observations straight off the bat using only our priors. So we can see below that for the top 10 storms, our prior model predicts values of shoreline change will be less than 1000s of meters. Our model predicts a mean of around 0 and the coloured bars show the 89% credible intervals for our predictions (more on this below). So again, we're not being too restrictive and we definitely cover all the reasonable parameter values. However, we've helped the sampler into a reasonable search space.
+The second convenience function we used is `prior_predictive()`. This is kind of cool. Because of our conceptualisation of the model as representing a data generating process we can simulate observations straight off the bat using only our priors. So we can see below that for the top 10 storms, our prior model predicts values of shoreline change will be less than 1000s of meters. Our model predicts a mean of around 0 and the coloured bars show the 89% credible intervals for our predictions (more on this below). So again, we're not being too restrictive and we definitely cover all the reasonable parameter values. However, we've helped the sampler into a reasonable search space.
 
 ```{python}
 #| echo: false
@@ -491,7 +491,7 @@ plot_pred_df = extract_model_predictions(
 plot_scatter_predictions_uncertainty(plot_pred_df, target_append = "_pred_mean", title = "Prior predictive check")
 ```
 
-And now we come to our beautiful posterior distributions which we can examine using the `arviz` package. The posterior distributions are shown for each of our variables along the y axis. Our 89% credible intervals are shown, as well as the interquartile range slightly bolder, and the median value shown with a dot.
+And now we come to our beautiful posterior distributions which we can examine using the `arviz` package. The posterior distributions are shown for each of our variables listed on the y axis. 89% credible intervals are shown, as well as the interquartile range slightly bolder, and the median value with a dot.
 
 ```{python}
 ax1 = az.plot_forest(
@@ -505,9 +505,9 @@ fix_forest_plots(ax1[0])
 plt.show()
 ```
 
-Okay we have some $\beta$s now. You can read the paper if you want the indepth analysis, but broadly for example for this model we see shoreline change is most strongly associated with $E_{o,cum}$, with higher offshore wave energy producing more erosion on average. We can see that we are quite uncertain as to the effect of $WL_{res}$ with the credible intervals straddling zero (note: for this model).
+Okay we have some plausible $\beta$ values now. You can read the paper if you want the indepth analysis, but for this model for example we see shoreline change is most strongly associated with $E_{o,cum}$, with higher offshore wave energy producing more erosion on average (XX erosion is defined as positive). We can see that we are quite uncertain as to the effect of $WL_{res}$ with the credible intervals straddling zero (note: for this initial model).
 
-While we won't cover it here, `arviz` provides excellent diagnostics for viewing the sampling traces and checking for convergence. This can be really useful if things are going wrong with your model, Bayes will typically be quite transparent when you've messed up. While this can sometime lead to hours/days of hair pulling trying to get complex models working, I think that a tendency not to silently fail is a real strength. Good friends have the courage to tell you when you've made a mistake.
+While we won't cover it here, `arviz` provides excellent diagnostics for viewing the sampling traces and checking for convergence. This can be really useful if things are going wrong with your model, Bayes will typically be quite transparent when you've messed up or where MCMC hasn't been able to get a representative picture of the posterior. While this can sometimes lead to hours/days of hair pulling trying to get complex models working, I think that a tendency not to silently fail is a real strength. Good friends have the courage to tell you when you've made a mistake.
 
 ::: {.callout-note title="Show me example code" appearance="simple" icon=false collapse=true}
 
@@ -523,7 +523,7 @@ az.rhat(fit_smoothie)
 ```
 :::
 
-Finally, saving the best until last - lets plot the predictions of the model vs the data and compare to the paper to make sure we are on the right track.
+Finally, saving the best until last - we plot the predictions of the model versus the data and compare to the paper to make sure we are on the right track.
 
 ```{python}
 #| echo: false
@@ -545,7 +545,7 @@ plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_pape
 plot_scatter_predictions(plot_df, r2_scores, rmse_scores, target_append = "_pred", title = "Bayesian smoothie predictions")
 ```
 
-Looking good, particularly for the partially sheltered location. But we are not matching the paper predictions and the keen eyed reader will understand why. We fit the model with no reference to the different locations. Our data have heterogeneity - different responses to the same storm event at different locations. What we've fit is one parameter to rule them all (per variable).
+Looking good, particularly for the partially sheltered location. But we are not matching the paper predictions and the keen eyed reader will understand why. We fit the model giving it no information about which data points belonged to different locations. Our data have heterogeneity - different responses to the same storm event at different locations. What we've fit is one parameter to rule them all (per variable).
 
 But don't worry I've got you, dawg. We set the data up at the start to make it really easy to build model complexity for just this scenario (whilst keeping the ability to extend into hierarchical models later on).
 
